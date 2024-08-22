@@ -12,6 +12,7 @@ import {
 } from "openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import { SafeERC20Upgradeable } from "openzeppelin-contracts-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import { ECDSA } from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import { IERC1271 } from "openzeppelin-contracts/contracts/interfaces/IERC1271.sol";
 
 /**
  * @title Comet Wrapper
@@ -44,13 +45,13 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     bytes4 internal constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
     /// @notice Mapping of users to basic data
-    mapping(address => UserBasicTracking) public userBasic;
+    mapping(address user => UserBasicTracking basicTrackingData) public userBasic;
 
     /// @notice Mapping of users to their rewards claimed
-    mapping(address => uint256) public rewardsClaimed;
+    mapping(address owner => uint256 amount) public rewardsClaimed;
 
     /// @notice The next expected nonce for an address, for validating authorizations via signature
-    mapping(address => uint256) public nonces;
+    mapping(address sender => uint256 nonce) public nonces;
 
     /// @notice The Comet address that this contract wraps
     CometInterface public immutable comet;
@@ -74,6 +75,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     error SignatureExpired();
     error TimestampTooLarge();
     error UninitializedReward();
+    error Unauthorized();
     error ZeroShares();
     error NotOwner();
 
@@ -359,7 +361,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
 
     /**
      * @dev This returns latest baseSupplyIndex regardless of whether comet.accrueAccount has been called for the
-     * current block. This works like `Comet.accruedInterestedIndices` at but not including computation of
+     * current block. This works like `Comet.accruedInterestIndices` at but not including computation of
      * `baseBorrowIndex` since we do not need that index in CometWrapper:
      * https://github.com/compound-finance/comet/blob/63e98e5d231ef50c755a9489eb346a561fc7663c/contracts/Comet.sol#L383-L394
      */
@@ -379,11 +381,9 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * baseSupplyIndex is used on the principal to get the user's latest balance including interest accruals.
      * trackingSupplyIndex is used to compute for rewards accruals.
      */
-    function getSupplyIndices() internal view returns (uint64 baseSupplyIndex_, uint64 trackingSupplyIndex_, uint40 lastAccrualTime_) {
+    function getSupplyIndices() internal view returns (uint64, uint64, uint40) {
         CometInterface.TotalsBasic memory totals = comet.totalsBasic();
-        baseSupplyIndex_ = totals.baseSupplyIndex;
-        trackingSupplyIndex_ = totals.trackingSupplyIndex;
-        lastAccrualTime_ = totals.lastAccrualTime;
+        return (totals.baseSupplyIndex, totals.trackingSupplyIndex, totals.lastAccrualTime);
     }
 
     /** @dev See {IERC4626-maxDeposit}. */
@@ -394,6 +394,21 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     /** @dev See {IERC4626-maxMint}. */
     function maxMint(address) public pure override returns (uint256) {
         return uint256(type(uint104).max);
+    }
+
+    /**
+     * @notice Sets Comet's ERC20 allowance of an asset for a manager
+     * @dev Only callable by governor
+     * @dev Note: Setting the `asset` as Comet's address will allow the manager
+     * to withdraw from Comet's Comet balance
+     * @param asset The asset that the manager will gain approval of
+     * @param manager The account which will be allowed or disallowed
+     * @param amount The amount of an asset to approve
+     */
+    function approveThis(address manager, address asset, uint amount) external {
+        if (msg.sender != comet.governor()) revert Unauthorized();
+
+        ERC20(asset).approve(manager, amount);
     }
 
     /**
@@ -597,9 +612,10 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         if (hasCode(signer)) {
             bytes memory signature = abi.encodePacked(r, s, v);
             (bool success, bytes memory data) = signer.staticcall(
-                abi.encodeWithSelector(EIP1271_MAGIC_VALUE, digest, signature)
+                // abi.encodeCall(EIP1271_MAGIC_VALUE, digest, signature)
+                abi.encodeCall(IERC1271.isValidSignature, (digest, signature))
             );
-            if (success == false) revert EIP1271VerificationFailed();
+            if (!success) revert EIP1271VerificationFailed();
             bytes4 returnValue = abi.decode(data, (bytes4));
             return returnValue == EIP1271_MAGIC_VALUE;
         } else {
