@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { CoreTest, TransparentUpgradeableProxy } from "./CoreTest.sol";
 import { CometWrapper, ICometRewards, CometHelpers, IERC20 } from "../src/CometWrapper.sol";
@@ -35,12 +35,14 @@ abstract contract RewardsTest is CoreTest {
 
         // Make sure that Alice and Bob have the same amount of shares in Comet and the CometWrapper
         // We do this because `comet.transfer` can burn 1 extra principal from the sender
-        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(comet.userBasic(alice).principal));
+        (int104 principal,,,,) = comet.userBasic(alice);
+        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(principal));
         if (diffInShares > 0) {
             vm.prank(alice);
             cometWrapper.redeem(diffInShares, address(0), alice);
         }
-        diffInShares = cometWrapper.balanceOf(bob) - uint256(int256(comet.userBasic(bob).principal));
+        (principal,,,,) = comet.userBasic(bob);
+        diffInShares = cometWrapper.balanceOf(bob) - uint256(int256(principal));
         if (diffInShares > 0) {
             vm.prank(bob);
             cometWrapper.redeem(diffInShares, address(0), bob);
@@ -116,12 +118,14 @@ abstract contract RewardsTest is CoreTest {
 
         // Make sure that Alice and Bob have the same amount of shares in Comet and the CometWrapper
         // We do this because `comet.transfer` can burn 1 extra principal from the sender
-        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(comet.userBasic(alice).principal));
+        (int104 principal,,,,) = comet.userBasic(alice);
+        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(principal));
         if (diffInShares > 0) {
             vm.prank(alice);
             cometWrapper.redeem(diffInShares, address(0), alice);
         }
-        diffInShares = cometWrapper.balanceOf(bob) - uint256(int256(comet.userBasic(bob).principal));
+        (principal,,,,) = comet.userBasic(bob);
+        diffInShares = cometWrapper.balanceOf(bob) - uint256(int256(principal));
         if (diffInShares > 0) {
             vm.prank(bob);
             cometWrapper.redeem(diffInShares, address(0), bob);
@@ -193,7 +197,8 @@ abstract contract RewardsTest is CoreTest {
 
         // Make sure that Alice has the same amount of shares in Comet and the CometWrapper
         // We do this because `comet.transfer` can burn 1 extra principal from the sender
-        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(comet.userBasic(alice).principal));
+        (int104 principal,,,,) = comet.userBasic(alice);
+        uint256 diffInShares = cometWrapper.balanceOf(alice) - uint256(int256(principal));
         if (diffInShares > 0) {
             vm.prank(alice);
             cometWrapper.redeem(diffInShares, address(0), alice);
