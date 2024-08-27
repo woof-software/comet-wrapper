@@ -916,13 +916,9 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         vm.startPrank(alice);
         comet.allow(wrapperAddress, true);
         cometWrapper.mint(5_000 * decimalScale, alice);
-        // Alice needs to give approval to herself in order to `transferFrom`
-        vm.expectEmit(true, true, true, true);
-        emit Approval(alice, alice, 2_500 * decimalScale);
-        cometWrapper.approve(alice, 2_500 * decimalScale);
 
         vm.expectEmit(true, true, true, true);
-        emit Approval(alice, alice, 0);
+        emit Transfer(alice, bob, 2_500 * decimalScale);
         cometWrapper.transferFrom(alice, bob, 2_500 * decimalScale);
         vm.stopPrank();
 

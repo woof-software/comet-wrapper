@@ -176,7 +176,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         uint256 shares = previewWithdraw(assets);
         if (shares == 0) revert ZeroShares();
 
-        if (msg.sender != owner) revert NotOwner();
+        if(owner != msg.sender) spendAllowanceInternal(owner, receiver, shares);
 
         _burn(owner, shares);
         IERC20(asset()).safeTransfer(receiver, assets);
@@ -196,10 +196,11 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      */
     function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
         if (shares == 0) revert ZeroShares();
-        if (msg.sender != owner) revert NotOwner();
 
         accrueInternal(owner);
         uint256 assets = previewRedeem(shares);
+
+        if(owner != msg.sender) spendAllowanceInternal(owner, receiver, shares);
 
         _burn(owner, shares);
         IERC20(asset()).safeTransfer(receiver, assets);
@@ -217,7 +218,6 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * @return bool Indicates success of the transfer
      */
     function transfer(address to, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        if (balanceOf(msg.sender) < amount) revert InsufficientAvailableBalance();
         transferInternal(msg.sender, to, amount);
         return true;
     }
@@ -230,7 +230,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * @return bool Indicates success of the transfer
      */
     function transferFrom(address from, address to, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        spendAllowanceInternal(from, to, amount);
+        if(from != msg.sender)  spendAllowanceInternal(from, to, amount);
         transferInternal(from, to, amount);
         return true;
     }
@@ -545,10 +545,11 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         address spender,
         uint256 amount
     ) internal {
+        if(owner == spender) return;
         uint256 allowed = allowance(owner, spender);
         if (allowed < amount) revert InsufficientAllowance();
         if (allowed != type(uint256).max) {
-            _approve(owner, spender, allowed - amount);
+            _spendAllowance(owner, spender, amount);
         }
     }
 
