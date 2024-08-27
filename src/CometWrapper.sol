@@ -77,7 +77,6 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     error UninitializedReward();
     error Unauthorized();
     error ZeroShares();
-    error NotOwner();
 
     /** Custom events **/
 
