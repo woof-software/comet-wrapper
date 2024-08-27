@@ -1,13 +1,23 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.19;
 
-interface ICometConfigurator {
+/**
+ * @title Compound's Comet Configuration Interface
+ * @author Compound
+ */
+contract CometConfiguration {
+    struct ExtConfiguration {
+        bytes32 name32;
+        bytes32 symbol32;
+    }
+
     struct Configuration {
         address governor;
         address pauseGuardian;
         address baseToken;
         address baseTokenPriceFeed;
         address extensionDelegate;
+
         uint64 supplyKink;
         uint64 supplyPerYearInterestRateSlopeLow;
         uint64 supplyPerYearInterestRateSlopeHigh;
@@ -23,6 +33,7 @@ interface ICometConfigurator {
         uint104 baseMinForRewards;
         uint104 baseBorrowMin;
         uint104 targetReserves;
+
         AssetConfig[] assetConfigs;
     }
 
@@ -35,21 +46,4 @@ interface ICometConfigurator {
         uint64 liquidationFactor;
         uint128 supplyCap;
     }
-
-    function getConfiguration(address cometProxy) external view returns (Configuration memory);
-
-    function setBaseTrackingSupplySpeed(address cometProxy, uint64 newBaseTrackingSupplySpeed) external;
-}
-
-interface Deployable {
-    function deploy(address cometProxy) external returns (address);
-}
-
-interface ICometProxyAdmin {
-    /**
-     * @dev Deploy a new Comet and upgrade the implementation of the Comet proxy
-     *  Requirements:
-     *   - This contract must be the admin of `CometProxy`
-     */
-    function deployAndUpgradeTo(Deployable configuratorProxy, address cometProxy) external;
 }

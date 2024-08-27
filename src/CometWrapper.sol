@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
-import { CometInterface, TotalsBasic } from "./vendor/CometInterface.sol";
+import { CometInterface } from "./vendor/CometInterface.sol";
 import { CometHelpers } from "./CometHelpers.sol";
 import { ICometRewards } from "./vendor/ICometRewards.sol";
-import { IERC7246 } from "./vendor/IERC7246.sol";
 import {
     ERC4626Upgradeable,
     ERC20Upgradeable as ERC20,
@@ -13,16 +12,17 @@ import {
 } from "openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import { SafeERC20Upgradeable } from "openzeppelin-contracts-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import { ECDSA } from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import { IERC1271 } from "openzeppelin-contracts/contracts/interfaces/IERC1271.sol";
 
 /**
  * @title Comet Wrapper
- * @notice Wrapper contract that adds ERC4626 and ERC7246 functionality to the rebasing Comet token (e.g. cUSDCv3)
+ * @notice Wrapper contract that adds ERC4626 functionality to the rebasing Comet token (e.g. cUSDCv3)
  * @author Compound & gjaldon
  */
-contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
+contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     using SafeERC20Upgradeable for IERC20;
 
-    struct UserBasic {
+    struct UserBasicTracking {
         uint64 baseTrackingAccrued;
         uint64 baseTrackingIndex;
     }
@@ -45,19 +45,13 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
     bytes4 internal constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
     /// @notice Mapping of users to basic data
-    mapping(address => UserBasic) public userBasic;
+    mapping(address user => UserBasicTracking basicTrackingData) public userBasic;
 
     /// @notice Mapping of users to their rewards claimed
-    mapping(address => uint256) public rewardsClaimed;
+    mapping(address owner => uint256 amount) public rewardsClaimed;
 
-    /// @notice Amount of an address's token balance that is encumbered
-    mapping (address => uint256) public encumberedBalanceOf;
-
-    /// @notice Amount encumbered from owner to taker (owner => taker => balance)
-    mapping (address => mapping (address => uint256)) public encumbrances;
-
-    /// @notice The next expected nonce for an address, for validating authorizations and encumbrances via signature
-    mapping(address => uint256) public nonces;
+    /// @notice The next expected nonce for an address, for validating authorizations via signature
+    mapping(address sender => uint256 nonce) public nonces;
 
     /// @notice The Comet address that this contract wraps
     CometInterface public immutable comet;
@@ -77,11 +71,11 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
     error EIP1271VerificationFailed();
     error InsufficientAllowance();
     error InsufficientAvailableBalance();
-    error InsufficientEncumbrance();
     error InvalidSignatureS();
     error SignatureExpired();
     error TimestampTooLarge();
     error UninitializedReward();
+    error Unauthorized();
     error ZeroShares();
 
     /** Custom events **/
@@ -134,6 +128,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return The amount of shares that are minted to the receiver
      */
     function deposit(uint256 assets, address receiver) public override returns (uint256) {
+        if (assets == type(uint256).max) assets = IERC20(asset()).balanceOf(msg.sender);
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), assets);
 
         accrueInternal(receiver);
@@ -180,9 +175,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
         uint256 shares = previewWithdraw(assets);
         if (shares == 0) revert ZeroShares();
 
-        if (msg.sender != owner) {
-            spendEncumbranceThenAllowanceInternal(owner, msg.sender, shares);
-        }
+        if(owner != msg.sender) spendAllowanceInternal(owner, receiver, shares);
 
         _burn(owner, shares);
         IERC20(asset()).safeTransfer(receiver, assets);
@@ -202,12 +195,11 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      */
     function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
         if (shares == 0) revert ZeroShares();
-        if (msg.sender != owner) {
-            spendEncumbranceThenAllowanceInternal(owner, msg.sender, shares);
-        }
 
         accrueInternal(owner);
         uint256 assets = previewRedeem(shares);
+
+        if(owner != msg.sender) spendAllowanceInternal(owner, receiver, shares);
 
         _burn(owner, shares);
         IERC20(asset()).safeTransfer(receiver, assets);
@@ -225,21 +217,19 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return bool Indicates success of the transfer
      */
     function transfer(address to, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        if (availableBalanceOf(msg.sender) < amount) revert InsufficientAvailableBalance();
         transferInternal(msg.sender, to, amount);
         return true;
     }
 
     /**
-     * @notice Transfer shares from a specified source to a recipient using the encumbrance and allowance of the caller
-     * @dev Spends the caller's encumbrance from `from` first, then their allowance from `from` (if necessary)
+     * @notice Transfer shares from a specified source to a recipient
      * @param from The source of the shares to be transferred
      * @param to The receiver of the shares to be transferred
      * @param amount The amount of shares to be transferred
      * @return bool Indicates success of the transfer
      */
     function transferFrom(address from, address to, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        spendEncumbranceThenAllowanceInternal(from, msg.sender, amount);
+        if(from != msg.sender)  spendAllowanceInternal(from, to, amount);
         transferInternal(from, to, amount);
         return true;
     }
@@ -277,7 +267,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * that supply the base asset to Comet.
      */
     function updateTrackingIndex(address account) internal {
-        UserBasic memory basic = userBasic[account];
+        UserBasicTracking memory basic = userBasic[account];
         uint256 principal = balanceOf(account);
         (, uint64 trackingSupplyIndex,) = getSupplyIndices();
 
@@ -318,7 +308,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
     function getRewardOwedInternal(ICometRewards.RewardConfig memory config, address account) internal returns (uint256) {
         if (config.token == address(0)) revert UninitializedReward();
 
-        UserBasic memory basic = accrueRewards(account);
+        UserBasicTracking memory basic = accrueRewards(account);
         uint256 claimed = rewardsClaimed[account];
         uint256 accrued = basic.baseTrackingAccrued;
 
@@ -362,7 +352,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @param account The address to whose rewards we want to accrue
      * @return The UserBasic struct with updated baseTrackingIndex and/or baseTrackingAccrued fields
      */
-    function accrueRewards(address account) public returns (UserBasic memory) {
+    function accrueRewards(address account) public returns (UserBasicTracking memory) {
         comet.accrueAccount(address(this));
         updateTrackingIndex(account);
         return userBasic[account];
@@ -370,7 +360,7 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
 
     /**
      * @dev This returns latest baseSupplyIndex regardless of whether comet.accrueAccount has been called for the
-     * current block. This works like `Comet.accruedInterestedIndices` at but not including computation of
+     * current block. This works like `Comet.accruedInterestIndices` at but not including computation of
      * `baseBorrowIndex` since we do not need that index in CometWrapper:
      * https://github.com/compound-finance/comet/blob/63e98e5d231ef50c755a9489eb346a561fc7663c/contracts/Comet.sol#L383-L394
      */
@@ -390,11 +380,34 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * baseSupplyIndex is used on the principal to get the user's latest balance including interest accruals.
      * trackingSupplyIndex is used to compute for rewards accruals.
      */
-    function getSupplyIndices() internal view returns (uint64 baseSupplyIndex_, uint64 trackingSupplyIndex_, uint40 lastAccrualTime_) {
-        TotalsBasic memory totals = comet.totalsBasic();
-        baseSupplyIndex_ = totals.baseSupplyIndex;
-        trackingSupplyIndex_ = totals.trackingSupplyIndex;
-        lastAccrualTime_ = totals.lastAccrualTime;
+    function getSupplyIndices() internal view returns (uint64, uint64, uint40) {
+        CometInterface.TotalsBasic memory totals = comet.totalsBasic();
+        return (totals.baseSupplyIndex, totals.trackingSupplyIndex, totals.lastAccrualTime);
+    }
+
+    /** @dev See {IERC4626-maxDeposit}. */
+    function maxDeposit(address) public pure override returns (uint256) {
+        return uint256(type(uint104).max);
+    }
+
+    /** @dev See {IERC4626-maxMint}. */
+    function maxMint(address) public pure override returns (uint256) {
+        return uint256(type(uint104).max);
+    }
+
+    /**
+     * @notice Sets Comet's ERC20 allowance of an asset for a manager
+     * @dev Only callable by governor
+     * @dev Note: Setting the `asset` as Comet's address will allow the manager
+     * to withdraw from Comet's Comet balance
+     * @param asset The asset that the manager will gain approval of
+     * @param manager The account which will be allowed or disallowed
+     * @param amount The amount of an asset to approve
+     */
+    function approveThis(address manager, address asset, uint amount) external {
+        if (msg.sender != comet.governor()) revert Unauthorized();
+
+        ERC20(asset).approve(manager, amount);
     }
 
     /**
@@ -429,8 +442,11 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return The total amount of shares that would be minted by the deposit
      */
     function previewDeposit(uint256 assets) public view override returns (uint256) {
+        if (comet.isTransferPaused()) return 0;
+        if (assets == type(uint256).max) assets = IERC20(asset()).balanceOf(msg.sender);
         // Calculate shares to mint by calculating the new principal amount
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
+        if(baseSupplyIndex_ == 0) return 0;
         uint256 currentPrincipal = totalSupply();
         uint256 newBalance = totalAssets() + assets;
         // Round down so accounting is in the wrapper's favor
@@ -446,8 +462,10 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return The total amount of assets required to mint the given shares
      */
     function previewMint(uint256 shares) public view override returns (uint256) {
+        if (comet.isTransferPaused()) return 0;
         // Back out the quantity of assets to deposit in order to increment principal by `shares`
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
+        if(baseSupplyIndex_ == 0) return 0;
         uint256 currentPrincipal = totalSupply();
         uint256 newPrincipal = currentPrincipal + shares;
         // Round up so accounting is in the wrapper's favor
@@ -463,13 +481,16 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return The total amount of shares required to withdraw the given assets
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256) {
+        if (comet.isTransferPaused()) return 0;
         // Calculate the quantity of shares to burn by calculating the new principal amount
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
+        if(baseSupplyIndex_ == 0) return 0;
         uint256 currentPrincipal = totalSupply();
-        uint256 newBalance = totalAssets() - assets;
+        uint256 currentBalance = totalAssets();
+        uint256 newBalance = currentBalance > assets ? currentBalance - assets : 0;
         // Round down so accounting is in the wrapper's favor
         uint104 newPrincipal = principalValueSupply(baseSupplyIndex_, newBalance, Rounding.DOWN);
-        return currentPrincipal - newPrincipal;
+        return currentPrincipal > newPrincipal ? currentPrincipal - newPrincipal : 0;
     }
 
     /**
@@ -479,13 +500,16 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
      * @return The total amount of assets that would be withdrawn by the redemption
      */
     function previewRedeem(uint256 shares) public view override returns (uint256) {
+        if (comet.isTransferPaused()) return 0;
         // Back out the quantity of assets to withdraw in order to decrement principal by `shares`
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
+        if(baseSupplyIndex_ == 0) return 0;
         uint256 currentPrincipal = totalSupply();
-        uint256 newPrincipal = currentPrincipal - shares;
+        uint256 newPrincipal = currentPrincipal > shares ? currentPrincipal - shares : 0;
         // Round up so accounting is in the wrapper's favor
         uint256 newBalance = presentValueSupply(baseSupplyIndex_, newPrincipal, Rounding.UP);
-        return totalAssets() - newBalance;
+        uint256 currentBalance = totalAssets();
+        return currentBalance > newBalance ? currentBalance - newBalance : 0;
     }
 
     /**
@@ -520,105 +544,11 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
         address spender,
         uint256 amount
     ) internal {
+        if(owner == spender) return;
         uint256 allowed = allowance(owner, spender);
         if (allowed < amount) revert InsufficientAllowance();
         if (allowed != type(uint256).max) {
-            _approve(owner, spender, allowed - amount);
-        }
-    }
-
-    /** ERC7246 Functions **/
-
-    /**
-     * @notice Amount of an address's token balance that is not encumbered
-     * @param owner Address to check the available balance of
-     * @return uint256 Unencumbered balance
-     */
-    function availableBalanceOf(address owner) public view returns (uint256) {
-        return (balanceOf(owner) - encumberedBalanceOf[owner]);
-    }
-
-    /**
-     * @notice Increases the amount of tokens that the caller has encumbered to
-     * `taker` by `amount`
-     * @param taker Address to increase encumbrance to
-     * @param amount Amount of tokens to increase the encumbrance by
-     */
-    function encumber(address taker, uint256 amount) external {
-        encumberInternal(msg.sender, taker, amount);
-    }
-
-    /**
-     * @dev Increase `owner`'s encumbrance to `taker` by `amount`
-     */
-    function encumberInternal(address owner, address taker, uint256 amount) internal {
-        if (availableBalanceOf(owner) < amount) revert InsufficientAvailableBalance();
-        encumbrances[owner][taker] += amount;
-        encumberedBalanceOf[owner] += amount;
-        emit Encumber(owner, taker, amount);
-    }
-
-    /**
-     * @notice Increases the amount of tokens that `owner` has encumbered to
-     * `taker` by `amount`.
-     * @dev Spends the caller's `allowance`
-     * @param owner Address to increase encumbrance from
-     * @param taker Address to increase encumbrance to
-     * @param amount Amount of tokens to increase the encumbrance to `taker` by
-     */
-    function encumberFrom(address owner, address taker, uint256 amount) external {
-        spendAllowanceInternal(owner, msg.sender, amount);
-        encumberInternal(owner, taker , amount);
-    }
-
-    /**
-     * @notice Reduces amount of tokens encumbered from `owner` to caller by
-     * `amount`
-     * @dev Spends all of the encumbrance if `amount` is greater than `owner`'s
-     * current encumbrance to caller
-     * @param owner Address to decrease encumbrance from
-     * @param amount Amount of tokens to decrease the encumbrance by
-     */
-    function release(address owner, uint256 amount) external {
-        releaseEncumbranceInternal(owner, msg.sender, amount);
-    }
-
-    /**
-     * @dev Reduce `owner`'s encumbrance to `taker` by `amount`
-     */
-    function releaseEncumbranceInternal(address owner, address taker, uint256 amount) internal {
-        if (encumbrances[owner][taker] < amount) revert InsufficientEncumbrance();
-        encumbrances[owner][taker] -= amount;
-        encumberedBalanceOf[owner] -= amount;
-        emit Release(owner, taker, amount);
-    }
-
-    /**
-     * @notice Spends an amount of an `owner`'s encumbrance to `spender`, falling back to their allowance for any
-     * amount not covered by the encumbrance
-     * @param owner The address that encumbrances and allowances are spent from
-     * @param spender The address that is spending the encumbrance and allowance
-     * @param amount The amount of encumbrance and/or allowance to be spent
-     */
-    function spendEncumbranceThenAllowanceInternal(address owner, address spender, uint256 amount) internal {
-        uint256 encumberedToTaker = encumbrances[owner][spender];
-        if (amount > encumberedToTaker)  {
-            uint256 excessAmount = amount - encumberedToTaker;
-
-            // WARNING: This check needs to happen BEFORE releaseEncumbranceInternal,
-            // otherwise the released encumbrance will increase availableBalanceOf(from),
-            // allowing msg.sender to transfer tokens that are encumbered to someone else
-
-            // Check to make sure that the owner has enough available balance to move around
-            // so as not to move tokens encumbered to others
-            if (availableBalanceOf(owner) < excessAmount) revert InsufficientAvailableBalance();
-
-            // Exceeds Encumbrance, so spend all of it
-            releaseEncumbranceInternal(owner, spender, encumberedToTaker);
-
-            spendAllowanceInternal(owner, spender, excessAmount);
-        } else {
-            releaseEncumbranceInternal(owner, spender, amount);
+            _spendAllowance(owner, spender, amount);
         }
     }
 
@@ -663,38 +593,6 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
     }
 
     /**
-     * @notice Sets an encumbrance from owner to taker via signature from signatory
-     * @param owner The address that signed the signature
-     * @param taker The address to create an encumbrance to
-     * @param amount Amount that owner is encumbering to taker
-     * @param expiry Expiration time for the signature
-     * @param v The recovery byte of the signature
-     * @param r Half of the ECDSA signature pair
-     * @param s Half of the ECDSA signature pair
-     */
-    function encumberBySig(
-        address owner,
-        address taker,
-        uint256 amount,
-        uint256 expiry,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external {
-        if (block.timestamp >= expiry) revert SignatureExpired();
-
-        uint256 nonce = nonces[owner];
-        bytes32 structHash = keccak256(abi.encode(ENCUMBER_TYPEHASH, owner, taker, amount, nonce, expiry));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), structHash));
-        if (isValidSignature(owner, digest, v, r, s)) {
-            nonces[owner]++;
-            encumberInternal(owner, taker, amount);
-        } else {
-            revert BadSignatory();
-        }
-    }
-
-    /**
      * @notice Checks if a signature is valid
      * @dev Supports EIP-1271 signatures for smart contracts
      * @param signer The address that signed the signature
@@ -714,9 +612,10 @@ contract CometWrapper is ERC4626Upgradeable, IERC7246, CometHelpers {
         if (hasCode(signer)) {
             bytes memory signature = abi.encodePacked(r, s, v);
             (bool success, bytes memory data) = signer.staticcall(
-                abi.encodeWithSelector(EIP1271_MAGIC_VALUE, digest, signature)
+                // abi.encodeCall(EIP1271_MAGIC_VALUE, digest, signature)
+                abi.encodeCall(IERC1271.isValidSignature, (digest, signature))
             );
-            if (success == false) revert EIP1271VerificationFailed();
+            if (!success) revert EIP1271VerificationFailed();
             bytes4 returnValue = abi.decode(data, (bytes4));
             return returnValue == EIP1271_MAGIC_VALUE;
         } else {

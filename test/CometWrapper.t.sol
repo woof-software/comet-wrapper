@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { CoreTest, CometHelpers, CometInterface, CometWrapper, IERC20, ICometRewards } from "./CoreTest.sol";
 import { CometMath } from "../src/vendor/CometMath.sol";
@@ -457,7 +457,9 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.withdraw(aliceAssets, alice, alice);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertEq(cometWrapper.underlyingBalance(alice), 0);
         assertApproxEqAbs(comet.balanceOf(alice), aliceCometBalance + aliceAssets, 2);
@@ -469,7 +471,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.withdraw(bobAssets, bob, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertEq(cometWrapper.underlyingBalance(bob), 0);
         assertApproxEqAbs(comet.balanceOf(bob), bobCometBalance + bobAssets, 2);
@@ -502,7 +505,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.withdraw(assetsToWithdraw, bob, alice);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertApproxEqAbs(cometWrapper.underlyingBalance(alice), expectedAliceWrapperAssets, 1);
         assertLe(cometWrapper.underlyingBalance(alice), expectedAliceWrapperAssets);
@@ -541,7 +545,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.withdraw(assetsToWithdraw, alice, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertApproxEqAbs(cometWrapper.underlyingBalance(bob), expectedBobWrapperAssets, 1);
         assertLe(cometWrapper.underlyingBalance(bob), expectedBobWrapperAssets);
@@ -676,7 +681,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.deposit(amount2, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
 
         skip(500 days);
@@ -704,7 +710,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         assertLe(bobAssetsWithdrawn, bobSharesToAssets);
 
         // Ensure that the wrapper is fully backed by the underlying Comet asset
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
     }
 
@@ -721,7 +728,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.deposit(3_555 * decimalScale, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
 
         skip(500 days);
@@ -739,7 +747,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.redeem(sharesToRedeem, bob, alice);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertEq(cometWrapper.balanceOf(alice), expectedAliceWrapperBalance);
         // Bob receives 1 wei less due to rounding down behavior in Comet transfer logic
@@ -760,7 +769,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.deposit(3_555 * decimalScale, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
 
         skip(250 days);
@@ -781,7 +791,8 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         cometWrapper.redeem(sharesToRedeem, alice, bob);
         vm.stopPrank();
 
-        assertEq(cometWrapper.totalSupply(), unsigned104(comet.userBasic(wrapperAddress).principal));
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertEq(cometWrapper.balanceOf(bob), expectedBobWrapperBalance);
         // Alice receives 1 wei less due to rounding down behavior in Comet transfer logic
@@ -894,8 +905,9 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         skip(30 days);
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         assertEq(cometWrapper.totalSupply(), 9_000 * decimalScale);
-        uint256 totalPrincipal = unsigned256(comet.userBasic(address(cometWrapper)).principal);
-        assertEq(cometWrapper.totalSupply(), totalPrincipal);
+        
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned256(principal));
     }
 
     function test_transferFromWorksForSender() public {
@@ -904,13 +916,9 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         vm.startPrank(alice);
         comet.allow(wrapperAddress, true);
         cometWrapper.mint(5_000 * decimalScale, alice);
-        // Alice needs to give approval to herself in order to `transferFrom`
-        vm.expectEmit(true, true, true, true);
-        emit Approval(alice, alice, 2_500 * decimalScale);
-        cometWrapper.approve(alice, 2_500 * decimalScale);
 
         vm.expectEmit(true, true, true, true);
-        emit Approval(alice, alice, 0);
+        emit Transfer(alice, bob, 2_500 * decimalScale);
         cometWrapper.transferFrom(alice, bob, 2_500 * decimalScale);
         vm.stopPrank();
 
