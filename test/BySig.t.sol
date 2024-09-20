@@ -5,29 +5,28 @@ import { CoreTest, CometHelpers, CometWrapper, ICometRewards } from "./CoreTest.
 
 // Tests for `permit` and `encumberBySig`
 abstract contract BySigTest is CoreTest {
-    bytes32 internal constant AUTHORIZATION_TYPEHASH = keccak256("Authorization(address owner,address spender,uint256 amount,uint256 nonce,uint256 expiry)");
-    bytes32 internal constant ENCUMBER_TYPEHASH = keccak256("Encumber(address owner,address taker,uint256 amount,uint256 nonce,uint256 expiry)");
+    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 amount,uint256 nonce,uint256 deadline)");
 
     function aliceAuthorization(uint256 amount, uint256 nonce, uint256 expiry) internal view returns (uint8, bytes32, bytes32) {
-        bytes32 structHash = keccak256(abi.encode(AUTHORIZATION_TYPEHASH, alice, bob, amount, nonce, expiry));
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, alice, bob, amount, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", cometWrapper.DOMAIN_SEPARATOR(), structHash));
         return vm.sign(alicePrivateKey, digest);
     }
 
     function aliceContractAuthorization(uint256 amount, uint256 nonce, uint256 expiry) internal view returns (uint8, bytes32, bytes32) {
-        bytes32 structHash = keccak256(abi.encode(AUTHORIZATION_TYPEHASH, aliceContract, bob, amount, nonce, expiry));
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, aliceContract, bob, amount, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", cometWrapper.DOMAIN_SEPARATOR(), structHash));
         return vm.sign(alicePrivateKey, digest);
     }
 
     function aliceEncumberAuthorization(uint256 amount, uint256 nonce, uint256 expiry) internal view returns (uint8, bytes32, bytes32) {
-        bytes32 structHash = keccak256(abi.encode(ENCUMBER_TYPEHASH, alice, bob, amount, nonce, expiry));
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, alice, bob, amount, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", cometWrapper.DOMAIN_SEPARATOR(), structHash));
         return vm.sign(alicePrivateKey, digest);
     }
 
     function aliceContractEncumberAuthorization(uint256 amount, uint256 nonce, uint256 expiry) internal view returns (uint8, bytes32, bytes32) {
-        bytes32 structHash = keccak256(abi.encode(ENCUMBER_TYPEHASH, aliceContract, bob, amount, nonce, expiry));
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, aliceContract, bob, amount, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", cometWrapper.DOMAIN_SEPARATOR(), structHash));
         return vm.sign(alicePrivateKey, digest);
     }

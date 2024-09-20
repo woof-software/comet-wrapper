@@ -2,8 +2,10 @@
 pragma solidity 0.8.19;
 
 import { Test } from "forge-std/Test.sol";
+import "forge-std/console.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { CometWrapper, CometInterface, ICometRewards, CometHelpers, IERC20, IERC20Metadata } from "../src/CometWrapper.sol";
+import { CometWrapperMainnet, ICometRewardsMainnet } from "../src/CometWrapperMainnet.sol";
 import { EIP1271Signer } from "../src/test/EIP1271Signer.sol";
 
 abstract contract CoreTest is Test {
@@ -62,14 +64,21 @@ abstract contract CoreTest is Test {
         comp = IERC20(compAddress);
         comet = CometInterface(cometAddress);
         cometRewards = ICometRewards(rewardAddress);
-        CometWrapper cometWrapperImpl =
-            new CometWrapper(comet, cometRewards);
+        CometWrapper cometWrapperImpl = CometWrapper(deployWrapperImplementationForGivenChain(cometAddress, rewardAddress));
         TransparentUpgradeableProxy cometWrapperProxy = new TransparentUpgradeableProxy(address(cometWrapperImpl), proxyAdminAddress, "");
         cometWrapper = CometWrapper(address(cometWrapperProxy));
         cometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
         wrapperAddress = address(cometWrapper);
         decimalScale = 10 ** IERC20Metadata(underlyingTokenAddress).decimals();
         aliceContract = address(new EIP1271Signer(alice));
+    }
+
+    function deployWrapperImplementationForGivenChain(address _comet, address _rewards) public returns (address impl) {
+        if(block.chainid == 1) { // mainnet
+            return address(new CometWrapperMainnet(CometInterface(_comet), ICometRewardsMainnet(_rewards)));
+        } else if(block.chainid == 8453) { // base
+            return address(new CometWrapper(CometInterface(_comet), ICometRewards(_rewards)));
+        }
     }
 
     function setUpFuzzTestAssumptions(uint256 amount) public view returns (uint256) {

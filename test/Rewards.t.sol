@@ -2,8 +2,11 @@
 pragma solidity 0.8.19;
 
 import { CoreTest, TransparentUpgradeableProxy } from "./CoreTest.sol";
-import { CometWrapper, ICometRewards, CometHelpers, IERC20 } from "../src/CometWrapper.sol";
+import { CometWrapper, ICometRewards, CometHelpers, IERC20, CometInterface } from "../src/CometWrapper.sol";
 import { Deployable, ICometConfigurator, ICometProxyAdmin } from "../src/vendor/ICometConfigurator.sol";
+import { CometWrapperMainnet, ICometRewardsMainnet } from "../src/CometWrapperMainnet.sol";
+import { MockCometRewards } from "../src/test/MockCometRewards.sol";
+import { MockCometRewardsMainnet } from "../src/test/MockCometRewardsMainnet.sol";
 
 abstract contract RewardsTest is CoreTest {
     function test_getRewardOwed(uint256 aliceAmount, uint256 bobAmount) public {
@@ -52,40 +55,54 @@ abstract contract RewardsTest is CoreTest {
 
         assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
         // Rewards accrual will not be applied retroactively
-        assertEq(cometWrapper.getRewardOwed(alice), 0);
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), 0);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
 
         skip(7 days);
 
         // Rewards accrual in CometWrapper matches rewards accrual in Comet
-        assertGt(cometWrapper.getRewardOwed(alice), 0);
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertGt(cometWrapper.getRewardOwed(alice, true), 0);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
 
-        assertGt(cometWrapper.getRewardOwed(bob), 0);
-        assertEq(cometWrapper.getRewardOwed(bob), cometRewards.getRewardOwed(cometAddress, bob).owed);
+        assertGt(cometWrapper.getRewardOwed(bob, true), 0);
+        assertEq(cometWrapper.getRewardOwed(bob, true), cometRewards.getRewardOwed(cometAddress, bob).owed);
 
         // The wrapper should always be owed the same or more rewards from Comet
         // than the sum of rewards owed to its depositors
         assertGe(
             cometRewards.getRewardOwed(cometAddress, wrapperAddress).owed,
-            cometWrapper.getRewardOwed(bob) + cometWrapper.getRewardOwed(alice)
+            cometWrapper.getRewardOwed(bob, true) + cometWrapper.getRewardOwed(alice, true)
         );
     }
 
     function test_getRewardOwed_revertsOnUninitializedReward() public {
         // Set up new reward contract with uninitialized reward token
-        bytes memory code = address(cometRewards).code;
-        address newRewardsAddr = makeAddr("newRewards");
-        vm.etch(newRewardsAddr, code);
+        address mockRewards;
+        if(block.chainid == 1) { // mainnet
+            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
+            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(1), 0, false));
+            mockRewards = address(mockRewardsContract);
+        } else if(block.chainid == 8453) { // base
+            MockCometRewards mockRewardsContract = new MockCometRewards();
+            mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(1), 0, false, 0));
+            mockRewards = address(mockRewardsContract);
+        }
 
-        CometWrapper cometWrapperImpl =
-            new CometWrapper(comet, ICometRewards(newRewardsAddr));
+        CometWrapper cometWrapperImpl = CometWrapper(deployWrapperImplementationForGivenChain(cometAddress, mockRewards));
         TransparentUpgradeableProxy cometWrapperProxy = new TransparentUpgradeableProxy(address(cometWrapperImpl), proxyAdminAddress, "");
         CometWrapper newCometWrapper = CometWrapper(address(cometWrapperProxy));
         newCometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
 
+        if(block.chainid == 1) { // mainnet
+            MockCometRewardsMainnet mockRewardsContract = MockCometRewardsMainnet(mockRewards);
+            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(0), 0, false));
+        } else if(block.chainid == 8453) { // base
+            MockCometRewards mockRewardsContract = MockCometRewards(mockRewards);
+            mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(0), 0, false, 0));
+        }
+        vm.prank(alice);
         vm.expectRevert(CometWrapper.UninitializedReward.selector);
-        newCometWrapper.getRewardOwed(alice);
+        newCometWrapper.getRewardOwed(alice, true);
     }
 
     function test_claimTo(uint256 aliceAmount, uint256 bobAmount) public {
@@ -141,7 +158,7 @@ abstract contract RewardsTest is CoreTest {
         vm.startPrank(alice);
         cometRewards.claim(cometAddress, alice, true);
         rewardsFromComet = comp.balanceOf(alice);
-        cometWrapper.claimTo(alice);
+        cometWrapper.claimTo(alice, true);
         wrapperRewards = comp.balanceOf(alice) - rewardsFromComet;
         vm.stopPrank();
 
@@ -152,7 +169,7 @@ abstract contract RewardsTest is CoreTest {
         vm.startPrank(bob);
         cometRewards.claim(cometAddress, bob, true);
         rewardsFromComet = comp.balanceOf(bob);
-        cometWrapper.claimTo(bob);
+        cometWrapper.claimTo(bob, true);
         wrapperRewards = comp.balanceOf(bob) - rewardsFromComet;
         vm.stopPrank();
 
@@ -161,19 +178,45 @@ abstract contract RewardsTest is CoreTest {
 
     function test_getClaimTo_revertsOnUninitializedReward() public {
         // Set up new reward contract with uninitialized reward token
-        bytes memory code = address(cometRewards).code;
-        address newRewardsAddr = makeAddr("newRewards");
-        vm.etch(newRewardsAddr, code);
+        address mockRewards;
+        if(block.chainid == 1) { // mainnet
+            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
+            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(1), 0, false));
+            mockRewards = address(mockRewardsContract);
+        } else if(block.chainid == 8453) { // base
+            MockCometRewards mockRewardsContract = new MockCometRewards();
+            mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(1), 0, false, 0));
+            mockRewards = address(mockRewardsContract);
+        }
 
-        CometWrapper cometWrapperImpl =
-            new CometWrapper(comet, ICometRewards(newRewardsAddr));
+        CometWrapper cometWrapperImpl = CometWrapper(deployWrapperImplementationForGivenChain(cometAddress, mockRewards));
         TransparentUpgradeableProxy cometWrapperProxy = new TransparentUpgradeableProxy(address(cometWrapperImpl), proxyAdminAddress, "");
         CometWrapper newCometWrapper = CometWrapper(address(cometWrapperProxy));
         newCometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
 
+        if(block.chainid == 1) { // mainnet
+            MockCometRewardsMainnet mockRewardsContract = MockCometRewardsMainnet(mockRewards);
+            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(0), 0, false));
+        } else if(block.chainid == 8453) { // base
+            MockCometRewards mockRewardsContract = MockCometRewards(mockRewards);
+            mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(0), 0, false, 0));
+        }
         vm.prank(alice);
         vm.expectRevert(CometWrapper.UninitializedReward.selector);
-        newCometWrapper.claimTo(alice);
+        newCometWrapper.claimTo(alice, true);
+    }
+
+    function test_constructor_revertsOnBadRewards() public {
+        if(block.chainid == 1) { // mainnet
+            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
+            vm.expectRevert(CometWrapper.BadRewards.selector);
+            new CometWrapperMainnet(comet, ICometRewardsMainnet(address(mockRewardsContract)));
+        
+        } else if(block.chainid == 8453) { // base
+            MockCometRewards mockRewardsContract = new MockCometRewards();
+            vm.expectRevert(CometWrapper.BadRewards.selector);
+            new CometWrapper(comet, ICometRewards(address(mockRewardsContract)));
+        }
     }
 
     function test_accrueRewards(uint256 aliceAmount) public {
@@ -210,7 +253,7 @@ abstract contract RewardsTest is CoreTest {
         (uint64 baseTrackingAccrued,) = cometWrapper.userBasic(alice);
         assertEq(baseTrackingAccrued, 0);
 
-        cometWrapper.accrueRewards(alice);
+        cometWrapper.accrueRewards(alice, true);
         (baseTrackingAccrued,) = cometWrapper.userBasic(alice);
         assertGt(baseTrackingAccrued, 0);
         assertEq(baseTrackingAccrued, comet.baseTrackingAccrued(address(cometWrapper)));
@@ -227,9 +270,9 @@ abstract contract RewardsTest is CoreTest {
         cometWrapper.transfer(bob, 5_000e6);
 
         // Alice should have 30 days worth of accrued rewards for her 10K WcUNDERLYING
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
         // Bob should have no rewards accrued yet since his balance prior to the transfer was 0
-        assertEq(cometWrapper.getRewardOwed(bob), 0);
+        assertEq(cometWrapper.getRewardOwed(bob, true), 0);
 
         vm.revertTo(snapshot);
         snapshot = vm.snapshot();
@@ -240,7 +283,7 @@ abstract contract RewardsTest is CoreTest {
         cometWrapper.redeem(5_000e6, alice, alice);
 
         // Alice should have 30 days worth of accrued rewards for her 10K WcUNDERLYING and not for 5K WcUNDERLYING
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
 
         vm.revertTo(snapshot);
         snapshot = vm.snapshot();
@@ -251,7 +294,7 @@ abstract contract RewardsTest is CoreTest {
         cometWrapper.withdraw(5_000e6, alice, alice);
 
         // Alice should have 30 days worth of accrued rewards for her 10K WcUNDERLYING and not for 5K WcUNDERLYING
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
 
         vm.revertTo(snapshot);
         snapshot = vm.snapshot();
@@ -262,7 +305,7 @@ abstract contract RewardsTest is CoreTest {
         cometWrapper.mint(5_000e6, alice);
 
         // Alice should have 30 days worth of accrued rewards for her 10K WcUNDERLYING and not for 5K WcUNDERLYING
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
 
         vm.revertTo(snapshot);
         snapshot = vm.snapshot();
@@ -273,7 +316,7 @@ abstract contract RewardsTest is CoreTest {
         cometWrapper.deposit(5_000e6, alice);
 
         // Alice should have 30 days worth of accrued rewards for her 10K WcUNDERLYING and not for 5K WcUNDERLYING
-        assertEq(cometWrapper.getRewardOwed(alice), cometRewards.getRewardOwed(cometAddress, alice).owed);
+        assertEq(cometWrapper.getRewardOwed(alice, true), cometRewards.getRewardOwed(cometAddress, alice).owed);
     }
 
     function setupAliceBalance() internal {

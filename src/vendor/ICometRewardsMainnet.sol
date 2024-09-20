@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-interface ICometRewards {
+interface ICometRewardsMainnet {
     struct RewardConfig {
         address token;
         uint64 rescaleFactor;
         bool shouldUpscale;
-        uint256 multiplier;
     }
 
     struct RewardOwed {
