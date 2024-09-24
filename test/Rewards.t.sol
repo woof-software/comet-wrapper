@@ -4,9 +4,9 @@ pragma solidity 0.8.19;
 import { CoreTest, TransparentUpgradeableProxy } from "./CoreTest.sol";
 import { CometWrapper, ICometRewards, CometHelpers, IERC20, CometInterface } from "../src/CometWrapper.sol";
 import { Deployable, ICometConfigurator, ICometProxyAdmin } from "../src/vendor/ICometConfigurator.sol";
-import { CometWrapperMainnet, ICometRewardsMainnet } from "../src/CometWrapperMainnet.sol";
+import { CometWrapperWithoutMultiplier, ICometRewardsWithoutMultiplier } from "../src/CometWrapperWithoutMultiplier.sol";
 import { MockCometRewards } from "../src/test/MockCometRewards.sol";
-import { MockCometRewardsMainnet } from "../src/test/MockCometRewardsMainnet.sol";
+import { MockCometRewardsWithoutMultiplier } from "../src/test/MockCometRewardsWithoutMultiplier.sol";
 
 abstract contract RewardsTest is CoreTest {
     function test_getRewardOwed(uint256 aliceAmount, uint256 bobAmount) public {
@@ -79,8 +79,8 @@ abstract contract RewardsTest is CoreTest {
         // Set up new reward contract with uninitialized reward token
         address mockRewards;
         if(block.chainid == 1) { // mainnet
-            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
-            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(1), 0, false));
+            MockCometRewardsWithoutMultiplier mockRewardsContract = new MockCometRewardsWithoutMultiplier();
+            mockRewardsContract.setConfig(ICometRewardsWithoutMultiplier.RewardConfig(address(1), 0, false));
             mockRewards = address(mockRewardsContract);
         } else if(block.chainid == 8453) { // base
             MockCometRewards mockRewardsContract = new MockCometRewards();
@@ -94,8 +94,8 @@ abstract contract RewardsTest is CoreTest {
         newCometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
 
         if(block.chainid == 1) { // mainnet
-            MockCometRewardsMainnet mockRewardsContract = MockCometRewardsMainnet(mockRewards);
-            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(0), 0, false));
+            MockCometRewardsWithoutMultiplier mockRewardsContract = MockCometRewardsWithoutMultiplier(mockRewards);
+            mockRewardsContract.setConfig(ICometRewardsWithoutMultiplier.RewardConfig(address(0), 0, false));
         } else if(block.chainid == 8453) { // base
             MockCometRewards mockRewardsContract = MockCometRewards(mockRewards);
             mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(0), 0, false, 0));
@@ -180,8 +180,8 @@ abstract contract RewardsTest is CoreTest {
         // Set up new reward contract with uninitialized reward token
         address mockRewards;
         if(block.chainid == 1) { // mainnet
-            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
-            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(1), 0, false));
+            MockCometRewardsWithoutMultiplier mockRewardsContract = new MockCometRewardsWithoutMultiplier();
+            mockRewardsContract.setConfig(ICometRewardsWithoutMultiplier.RewardConfig(address(1), 0, false));
             mockRewards = address(mockRewardsContract);
         } else if(block.chainid == 8453) { // base
             MockCometRewards mockRewardsContract = new MockCometRewards();
@@ -195,8 +195,8 @@ abstract contract RewardsTest is CoreTest {
         newCometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
 
         if(block.chainid == 1) { // mainnet
-            MockCometRewardsMainnet mockRewardsContract = MockCometRewardsMainnet(mockRewards);
-            mockRewardsContract.setConfig(ICometRewardsMainnet.RewardConfig(address(0), 0, false));
+            MockCometRewardsWithoutMultiplier mockRewardsContract = MockCometRewardsWithoutMultiplier(mockRewards);
+            mockRewardsContract.setConfig(ICometRewardsWithoutMultiplier.RewardConfig(address(0), 0, false));
         } else if(block.chainid == 8453) { // base
             MockCometRewards mockRewardsContract = MockCometRewards(mockRewards);
             mockRewardsContract.setConfig(ICometRewards.RewardConfig(address(0), 0, false, 0));
@@ -208,9 +208,9 @@ abstract contract RewardsTest is CoreTest {
 
     function test_constructor_revertsOnBadRewards() public {
         if(block.chainid == 1) { // mainnet
-            MockCometRewardsMainnet mockRewardsContract = new MockCometRewardsMainnet();
+            MockCometRewardsWithoutMultiplier mockRewardsContract = new MockCometRewardsWithoutMultiplier();
             vm.expectRevert(CometWrapper.BadRewards.selector);
-            new CometWrapperMainnet(comet, ICometRewardsMainnet(address(mockRewardsContract)));
+            new CometWrapperWithoutMultiplier(comet, ICometRewardsWithoutMultiplier(address(mockRewardsContract)));
         
         } else if(block.chainid == 8453) { // base
             MockCometRewards mockRewardsContract = new MockCometRewards();

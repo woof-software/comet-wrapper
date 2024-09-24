@@ -17,7 +17,7 @@ import { IERC1271 } from "openzeppelin-contracts/contracts/interfaces/IERC1271.s
 /**
  * @title Comet Wrapper
  * @notice Wrapper contract that adds ERC4626 functionality to the rebasing Comet token (e.g. cUSDCv3)
- * @author Compound & gjaldon
+ * @author Compound & gjaldon & WOOF!
  */
 contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     using SafeERC20Upgradeable for IERC20;
@@ -31,7 +31,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     string public constant VERSION = "1";
 
     /// @dev The EIP-712 typehash for authorization via permit
-    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 amount,uint256 nonce,uint256 deadline)");
+    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     /// @dev The EIP-712 typehash for the contract's domain
     bytes32 internal constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -311,9 +311,6 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         uint256 claimed = rewardsClaimed[account];
         uint256 accrued = basic.baseTrackingAccrued;
 
-        // Note: Newer CometRewards contracts (those deployed on L2s) store a multiplier and use it during the reward calculation.
-        // As of 10/05/2023, all the multipliers are currently set to 1e18, so the following code is still compatible. This contract
-        // will need to properly handle the multiplier if there is ever a rewards contract that sets it to some other value.
         if (config.shouldUpscale) {
             accrued *= config.rescaleFactor;
         } else {
@@ -354,8 +351,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * @return The UserBasic struct with updated baseTrackingIndex and/or baseTrackingAccrued fields
      */
     function accrueRewards(address account, bool shouldAccrue) public returns (UserBasicTracking memory) {
-        if(shouldAccrue) comet.accrueAccount(address(this));
-        updateTrackingIndex(account);
+        if(shouldAccrue) accrueInternal(account);
         return userBasic[account];
     }
 
@@ -602,7 +598,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
             (bool success, bytes memory data) = signer.staticcall(
                 abi.encodeCall(IERC1271.isValidSignature, (digest, signature))
             );
-            if (!success || data.length != 32) revert EIP1271VerificationFailed();
+            if (!success || data.length < 32) revert EIP1271VerificationFailed();
             bytes4 returnValue = abi.decode(data, (bytes4));
             return returnValue == EIP1271_MAGIC_VALUE;
         } else {

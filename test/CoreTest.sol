@@ -5,7 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import "forge-std/console.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { CometWrapper, CometInterface, ICometRewards, CometHelpers, IERC20, IERC20Metadata } from "../src/CometWrapper.sol";
-import { CometWrapperMainnet, ICometRewardsMainnet } from "../src/CometWrapperMainnet.sol";
+import { CometWrapperWithoutMultiplier, ICometRewardsWithoutMultiplier } from "../src/CometWrapperWithoutMultiplier.sol";
 import { EIP1271Signer } from "../src/test/EIP1271Signer.sol";
 
 abstract contract CoreTest is Test {
@@ -75,7 +75,7 @@ abstract contract CoreTest is Test {
 
     function deployWrapperImplementationForGivenChain(address _comet, address _rewards) public returns (address impl) {
         if(block.chainid == 1) { // mainnet
-            return address(new CometWrapperMainnet(CometInterface(_comet), ICometRewardsMainnet(_rewards)));
+            return address(new CometWrapperWithoutMultiplier(CometInterface(_comet), ICometRewardsWithoutMultiplier(_rewards)));
         } else if(block.chainid == 8453) { // base
             return address(new CometWrapper(CometInterface(_comet), ICometRewards(_rewards)));
         }

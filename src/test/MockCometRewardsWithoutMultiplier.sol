@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import { ICometRewardsMainnet } from "../vendor/ICometRewardsMainnet.sol";
+import { ICometRewardsWithoutMultiplier } from "../vendor/ICometRewardsWithoutMultiplier.sol";
 
-contract MockCometRewardsMainnet is ICometRewardsMainnet {
+contract MockCometRewardsWithoutMultiplier is ICometRewardsWithoutMultiplier {
 
     RewardConfig public config;
 

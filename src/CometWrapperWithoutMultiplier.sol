@@ -3,7 +3,7 @@ pragma solidity 0.8.19;
 
 import { CometInterface } from "./vendor/CometInterface.sol";
 import { CometHelpers } from "./CometHelpers.sol";
-import { ICometRewardsMainnet } from "./vendor/ICometRewardsMainnet.sol";
+import { ICometRewardsWithoutMultiplier } from "./vendor/ICometRewardsWithoutMultiplier.sol";
 import {
     ERC4626Upgradeable,
     ERC20Upgradeable as ERC20,
@@ -17,9 +17,9 @@ import { IERC1271 } from "openzeppelin-contracts/contracts/interfaces/IERC1271.s
 /**
  * @title Comet Wrapper
  * @notice Wrapper contract that adds ERC4626 functionality to the rebasing Comet token (e.g. cUSDCv3)
- * @author Compound & gjaldon
+ * @author Compound & gjaldon & WOOF!
  */
-contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
+contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
     using SafeERC20Upgradeable for IERC20;
 
     struct UserBasicTracking {
@@ -31,7 +31,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
     string public constant VERSION = "1";
 
     /// @dev The EIP-712 typehash for authorization via permit
-    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 amount,uint256 nonce,uint256 deadline)");
+    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     /// @dev The EIP-712 typehash for the contract's domain
     bytes32 internal constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -54,7 +54,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
     CometInterface public immutable comet;
 
     /// @notice The CometRewards address that this contract can claim rewards from
-    ICometRewardsMainnet public immutable cometRewards;
+    ICometRewardsWithoutMultiplier public immutable cometRewards;
 
     /// @notice The scale for reward tracking
     uint256 public immutable trackingIndexScale;
@@ -87,7 +87,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
      * @param comet_ The Comet token to wrap
      * @param cometRewards_ The rewards contract for the Comet market
      */
-    constructor(CometInterface comet_, ICometRewardsMainnet cometRewards_) {
+    constructor(CometInterface comet_, ICometRewardsWithoutMultiplier cometRewards_) {
         // Minimal validation that contract is CometRewards
         if(cometRewards_.rewardConfig(address(comet_)).token == address(0)) revert BadRewards();
 
@@ -297,23 +297,20 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of rewards owed to an account
      */
     function getRewardOwed(address account, bool shouldAccrue) external returns (uint256) {
-        ICometRewardsMainnet.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
+        ICometRewardsWithoutMultiplier.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
         return getRewardOwedInternal(config, account, shouldAccrue);
     }
 
     /**
      * @dev Mimics the reward owed calculation in CometRewards to arrive at the reward owed to a user of the wrapper
      */
-    function getRewardOwedInternal(ICometRewardsMainnet.RewardConfig memory config, address account, bool shouldAccrue) internal returns (uint256 owed) {
+    function getRewardOwedInternal(ICometRewardsWithoutMultiplier.RewardConfig memory config, address account, bool shouldAccrue) internal returns (uint256 owed) {
         if (config.token == address(0)) revert UninitializedReward();
 
         UserBasicTracking memory basic = accrueRewards(account, shouldAccrue);
         uint256 claimed = rewardsClaimed[account];
         uint256 accrued = basic.baseTrackingAccrued;
 
-        // Note: Newer CometRewards contracts (those deployed on L2s) store a multiplier and use it during the reward calculation.
-        // As of 10/05/2023, all the multipliers are currently set to 1e18, so the following code is still compatible. This contract
-        // will need to properly handle the multiplier if there is ever a rewards contract that sets it to some other value.
         if (config.shouldUpscale) {
             accrued *= config.rescaleFactor;
         } else {
@@ -333,7 +330,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
      */
     function claimTo(address to, bool shouldAccrue) external {
         address from = msg.sender;
-        ICometRewardsMainnet.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
+        ICometRewardsWithoutMultiplier.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
         uint256 owed = getRewardOwedInternal(config, from, shouldAccrue);
 
         if (owed != 0) {
@@ -354,8 +351,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
      * @return The UserBasic struct with updated baseTrackingIndex and/or baseTrackingAccrued fields
      */
     function accrueRewards(address account, bool shouldAccrue) public returns (UserBasicTracking memory) {
-        if(shouldAccrue) comet.accrueAccount(address(this));
-        updateTrackingIndex(account);
+        if(shouldAccrue) accrueInternal(account);
         return userBasic[account];
     }
 
@@ -567,7 +563,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
         bytes32 r,
         bytes32 s
     ) external {
-        if (block.timestamp >= deadline) revert SignatureExpired();
+        if (block.timestamp > deadline) revert SignatureExpired();
 
         uint256 nonce = nonces[owner];
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, amount, nonce, deadline));
@@ -602,7 +598,7 @@ contract CometWrapperMainnet is ERC4626Upgradeable, CometHelpers {
             (bool success, bytes memory data) = signer.staticcall(
                 abi.encodeCall(IERC1271.isValidSignature, (digest, signature))
             );
-            if (!success || data.length != 32) revert EIP1271VerificationFailed();
+            if (!success || data.length < 32) revert EIP1271VerificationFailed();
             bytes4 returnValue = abi.decode(data, (bytes4));
             return returnValue == EIP1271_MAGIC_VALUE;
         } else {

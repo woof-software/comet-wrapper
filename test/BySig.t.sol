@@ -5,7 +5,7 @@ import { CoreTest, CometHelpers, CometWrapper, ICometRewards } from "./CoreTest.
 
 // Tests for `permit` and `encumberBySig`
 abstract contract BySigTest is CoreTest {
-    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 amount,uint256 nonce,uint256 deadline)");
+    bytes32 internal constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     function aliceAuthorization(uint256 amount, uint256 nonce, uint256 expiry) internal view returns (uint8, bytes32, bytes32) {
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, alice, bob, amount, nonce, expiry));
@@ -214,7 +214,7 @@ abstract contract BySigTest is CoreTest {
         (uint8 v, bytes32 r, bytes32 s) = aliceAuthorization(allowance, nonce, expiry);
 
         // the expiry block arrives
-        vm.warp(expiry);
+        vm.warp(expiry + 1);
 
         // bob calls permit with the signature after the expiry
         vm.prank(bob);
@@ -436,7 +436,7 @@ abstract contract BySigTest is CoreTest {
         (uint8 v, bytes32 r, bytes32 s) = aliceContractAuthorization(allowance, nonce, expiry);
 
         // the expiry block arrives
-        vm.warp(expiry);
+        vm.warp(expiry + 1);
 
         // bob calls permit with the signature after the expiry
         vm.prank(bob);
