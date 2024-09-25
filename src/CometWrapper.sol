@@ -563,7 +563,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         bytes32 r,
         bytes32 s
     ) external {
-        if (block.timestamp >= deadline) revert SignatureExpired();
+        if (block.timestamp > deadline) revert SignatureExpired();
 
         uint256 nonce = nonces[owner];
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, amount, nonce, deadline));
