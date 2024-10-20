@@ -3,7 +3,7 @@ pragma solidity 0.8.19;
 
 import { CometInterface } from "./vendor/CometInterface.sol";
 import { CometHelpers } from "./CometHelpers.sol";
-import { ICometRewards } from "./vendor/ICometRewards.sol";
+import { ICometRewardsWithoutMultiplier } from "./vendor/ICometRewardsWithoutMultiplier.sol";
 import {
     ERC4626Upgradeable,
     ERC20Upgradeable as ERC20,
@@ -19,7 +19,7 @@ import { IERC1271 } from "openzeppelin-contracts/contracts/interfaces/IERC1271.s
  * @notice Wrapper contract that adds ERC4626 functionality to the rebasing Comet token (e.g. cUSDCv3)
  * @author Compound & gjaldon & WOOF!
  */
-contract CometWrapper is ERC4626Upgradeable, CometHelpers {
+contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
     using SafeERC20Upgradeable for IERC20;
 
     struct UserBasicTracking {
@@ -54,7 +54,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     CometInterface public immutable comet;
 
     /// @notice The CometRewards address that this contract can claim rewards from
-    ICometRewards public immutable cometRewards;
+    ICometRewardsWithoutMultiplier public immutable cometRewards;
 
     /// @notice The scale for reward tracking
     uint256 public immutable trackingIndexScale;
@@ -87,7 +87,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * @param comet_ The Comet token to wrap
      * @param cometRewards_ The rewards contract for the Comet market
      */
-    constructor(CometInterface comet_, ICometRewards cometRewards_) {
+    constructor(CometInterface comet_, ICometRewardsWithoutMultiplier cometRewards_) {
         // Minimal validation that contract is CometRewards
         if(cometRewards_.rewardConfig(address(comet_)).token == address(0)) revert BadRewards();
 
@@ -297,14 +297,14 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of rewards owed to an account
      */
     function getRewardOwed(address account, bool shouldAccrue) external returns (uint256) {
-        ICometRewards.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
+        ICometRewardsWithoutMultiplier.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
         return getRewardOwedInternal(config, account, shouldAccrue);
     }
 
     /**
      * @dev Mimics the reward owed calculation in CometRewards to arrive at the reward owed to a user of the wrapper
      */
-    function getRewardOwedInternal(ICometRewards.RewardConfig memory config, address account, bool shouldAccrue) internal returns (uint256) {
+    function getRewardOwedInternal(ICometRewardsWithoutMultiplier.RewardConfig memory config, address account, bool shouldAccrue) internal returns (uint256 owed) {
         if (config.token == address(0)) revert UninitializedReward();
 
         UserBasicTracking memory basic = accrueRewards(account, shouldAccrue);
@@ -317,9 +317,9 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
             accrued /= config.rescaleFactor;
         }
 
-        uint256 owed = accrued > claimed ? accrued - claimed : 0;
+        owed = accrued > claimed ? accrued - claimed : 0;
 
-        return owed * config.multiplier / 1e18;
+        return owed;
     }
 
     /**
@@ -330,7 +330,7 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
      */
     function claimTo(address to, bool shouldAccrue) external {
         address from = msg.sender;
-        ICometRewards.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
+        ICometRewardsWithoutMultiplier.RewardConfig memory config = cometRewards.rewardConfig(address(comet));
         uint256 owed = getRewardOwedInternal(config, from, shouldAccrue);
 
         if (owed != 0) {
