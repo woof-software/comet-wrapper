@@ -4,7 +4,7 @@ set -exo pipefail
 
 # Load .env file if it exists
 if [ -f .env ]; then
-  export $(cat .env | xargs)
+  source .env
 fi
 
 if [ -n "$RPC_OPTIMISM_URL" ]; then

@@ -19,9 +19,9 @@ import { CometWrapperWithoutMultiplier, ICometRewardsWithoutMultiplier } from ".
 // ETHERSCAN_KEY
 
 contract DeployCometWrapper is Script {
-    address[] COMET_ADDRESS_MAINNET=[0x3Afdc9BCA9213A35503b077a6072F3D0d5AB0840, 0x3D0bb1ccaB520A66e607822fC55BC921738fAFE3, 0xA17581A9E3356d9A858b789D68B4d866e593aE94, 0xc3d688B66703497DAA19211EEdff47f25384cdc3];
-    string[] TOKEN_NAME_MAINNET=["Wrapped Comet USDT", "Wrapped Comet wstETH", "Wrapped Comet WETH", "Wrapped Comet USDC"];
-    string[] TOKEN_SYMBOL_MAINNET=["wcUSDTv3", "wcWstETHv3", "wcWETHv3", "wcUSDCv3"];
+    address[] COMET_ADDRESS_MAINNET=[0x3Afdc9BCA9213A35503b077a6072F3D0d5AB0840, 0x3D0bb1ccaB520A66e607822fC55BC921738fAFE3, 0xA17581A9E3356d9A858b789D68B4d866e593aE94, 0xc3d688B66703497DAA19211EEdff47f25384cdc3, 0x5D409e56D886231aDAf00c8775665AD0f9897b56];
+    string[] TOKEN_NAME_MAINNET=["Wrapped Comet USDT", "Wrapped Comet wstETH", "Wrapped Comet WETH", "Wrapped Comet USDC", "Wrapped Comet USDS"];
+    string[] TOKEN_SYMBOL_MAINNET=["wcUSDTv3", "wcWstETHv3", "wcWETHv3", "wcUSDCv3", "wcUSDSv3"];
     address REWARDS_ADDRESS_MAINNET=0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
     address PROXY_ADMIN_ADDRESS_MAINNET=0x1EC63B5883C3481134FD50D5DAebc83Ecd2E8779;
 
@@ -37,9 +37,9 @@ contract DeployCometWrapper is Script {
     address REWARDS_ADDRESS_POLYGON=0x45939657d1CA34A8FA39A924B71D28Fe8431e581;
     address PROXY_ADMIN_ADDRESS_POLYGON=0xd712ACe4ca490D4F3E92992Ecf3DE12251b975F9;
 
-    address[] COMET_ADDRESS_BASE=[0xb125E6687d4313864e53df431d5425969c15Eb2F, 0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf, 0x46e6b214b524310239732D51387075E0e70970bf];
-    string[] TOKEN_NAME_BASE=["Wrapped Comet USDC", "Wrapped Comet USDbC", "Wrapped Comet WETH"];
-    string[] TOKEN_SYMBOL_BASE=["wcUSDCv3", "wcUSDbCv3", "wcWETHv3"];
+    address[] COMET_ADDRESS_BASE=[0xb125E6687d4313864e53df431d5425969c15Eb2F, 0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf, 0x46e6b214b524310239732D51387075E0e70970bf, 0x784efeB622244d2348d4F2522f8860B96fbEcE89];
+    string[] TOKEN_NAME_BASE=["Wrapped Comet USDC", "Wrapped Comet USDbC", "Wrapped Comet WETH", "Wrapped Comet AERO"];
+    string[] TOKEN_SYMBOL_BASE=["wcUSDCv3", "wcUSDbCv3", "wcWETHv3", "wcAEROv3"];
     address REWARDS_ADDRESS_BASE=0x123964802e6ABabBE1Bc9547D72Ef1B69B00A6b1;
     address PROXY_ADMIN_ADDRESS_BASE=0xbdE8F31D2DdDA895264e27DD990faB3DC87b372d;
 
@@ -65,6 +65,7 @@ contract DeployCometWrapper is Script {
     function run() public {
         address deployer = vm.addr(vm.envUint("DEPLOYER_PK"));
         uint256 chainId = block.chainid;
+        vm.startBroadcast(deployer);
         if (chainId == 1) {
             cometAddresses = COMET_ADDRESS_MAINNET;
             tokenNames = TOKEN_NAME_MAINNET;
@@ -73,7 +74,6 @@ contract DeployCometWrapper is Script {
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_MAINNET;
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapperWithoutMultiplier");
                 deployCometWrapperWithoutMultiplier(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 10) {
@@ -82,10 +82,8 @@ contract DeployCometWrapper is Script {
             tokenSymbols = TOKEN_SYMBOL_OPTIMISM;
             rewardsAddr = REWARDS_ADDRESS_OPTIMISM;
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_OPTIMISM;
-            vm.startBroadcast(deployer);
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapper");
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 137) {
@@ -94,10 +92,8 @@ contract DeployCometWrapper is Script {
             tokenSymbols = TOKEN_SYMBOL_POLYGON;
             rewardsAddr = REWARDS_ADDRESS_POLYGON;
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_POLYGON;
-            vm.startBroadcast(deployer);
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapperWithoutMultiplier");
                 deployCometWrapperWithoutMultiplier(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 8453) {
@@ -106,10 +102,8 @@ contract DeployCometWrapper is Script {
             tokenSymbols = TOKEN_SYMBOL_BASE;
             rewardsAddr = REWARDS_ADDRESS_BASE;
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_BASE;
-            vm.startBroadcast(deployer);
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapper");
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 42161){            
@@ -118,22 +112,18 @@ contract DeployCometWrapper is Script {
             tokenSymbols = TOKEN_SYMBOL_ARBITRUM;
             rewardsAddr = REWARDS_ADDRESS_ARBITRUM;
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_ARBITRUM;
-            vm.startBroadcast(deployer);
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapper");
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 534352){
-            cometAddresses = vm.envAddress("COMET_ADDRESS_SCROLL", ",");
-            tokenNames = vm.envString("TOKEN_NAME_SCROLL", ",");         // Wrapped Comet WETH || Wrapped Comet USDC
-            tokenSymbols = vm.envString("TOKEN_SYMBOL_SCROLL", ",");     // wcWETHv3 || wcUSDCv3
-            rewardsAddr = vm.envAddress("REWARDS_ADDRESS_SCROLL");
-            proxyAdminAddr = vm.envAddress("PROXY_ADMIN_ADDRESS_SCROLL");
-            vm.startBroadcast(deployer);
+            cometAddresses = COMET_ADDRESS_SCROLL;
+            tokenNames = TOKEN_NAME_SCROLL;
+            tokenSymbols = TOKEN_SYMBOL_SCROLL;
+            rewardsAddr = REWARDS_ADDRESS_SCROLL;
+            proxyAdminAddr = PROXY_ADMIN_ADDRESS_SCROLL;
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
-                console.log("Deploying CometWrapper");
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         }
@@ -150,12 +140,11 @@ contract DeployCometWrapper is Script {
         address cometAddr
     ) public view {    
         console.log("=============================================================");
-        console.log("Token Name:      ", tokenName);
-        console.log("Token Symbol:    ", tokenSymbol);
-        console.log("Comet Address:   ", cometAddr);
-        console.log("Rewards Address: ", rewardsAddr);
-        console.log("Proxy Admin Address: ", proxyAdminAddr);
-        console.log("=============================================================");
+        console.log("Token Name:           ", tokenName);
+        console.log("Token Symbol:         ", tokenSymbol);
+        console.log("Comet Address:        ", cometAddr);
+        console.log("Rewards Address:      ", rewardsAddr);
+        console.log("Proxy Admin Address:  ", proxyAdminAddr);
         }
 
     function deployCometWrapper(
@@ -169,6 +158,10 @@ contract DeployCometWrapper is Script {
 
         // Wrap in ABI to support easier calls
         CometWrapper cometWrapper = CometWrapper(address(cometWrapperProxy));
+
+        console.log("CometWrapper address: ", address(cometWrapper));
+        console.log("=============================================================");
+        console.log();
 
         // Initialize the wrapper contract
         cometWrapper.initialize(tokenName, tokenSymbol);
@@ -185,6 +178,10 @@ contract DeployCometWrapper is Script {
 
         // Wrap in ABI to support easier calls
         CometWrapperWithoutMultiplier cometWrapper = CometWrapperWithoutMultiplier(address(cometWrapperProxy));
+
+        console.log("CometWrapper address: ", address(cometWrapper));
+        console.log("=============================================================");
+        console.log();
 
         // Initialize the wrapper contract
         cometWrapper.initialize(tokenName, tokenSymbol);

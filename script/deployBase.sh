@@ -4,7 +4,7 @@ set -exo pipefail
 
 # Load .env file if it exists
 if [ -f .env ]; then
-  export $(cat .env | xargs)
+  source .env
 fi
 
 if [ -n "$BASE_RPC_URL" ]; then
