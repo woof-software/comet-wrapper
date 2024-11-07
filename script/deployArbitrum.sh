@@ -30,6 +30,8 @@ forge script \
     $rpc_args \
     $wallet_args \
     $etherscan_args \
+    --gas-price 20000000 \
+    --legacy \
     --broadcast \
     $@ \
     script/DeployCometWrapper.s.sol:DeployCometWrapper
