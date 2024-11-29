@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { Test } from "forge-std/Test.sol";
 import { CometWrapper, CometInterface, ICometRewards, CometHelpers } from "../src/CometWrapper.sol";
 import { BySigTest } from "./BySig.t.sol";
 import { CometWrapperTest } from "./CometWrapper.t.sol";
 import { CometWrapperInvariantTest } from "./CometWrapperInvariant.t.sol";
-import { EncumberTest } from "./Encumber.t.sol";
 import { RewardsTest } from "./Rewards.t.sol";
 
-contract MainnetWETHTest is CometWrapperTest, CometWrapperInvariantTest, EncumberTest, RewardsTest, BySigTest {
+contract MainnetWETHTest is CometWrapperTest, CometWrapperInvariantTest, RewardsTest, BySigTest {
     string public override NETWORK = "mainnet";
     uint256 public override FORK_BLOCK_NUMBER = 18285773;
 

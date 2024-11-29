@@ -1,6 +1,10 @@
 #!/bin/bash
 
 set -exo pipefail
+# Load .env file if it exists
+if [ -f .env ]; then
+  source .env
+fi
 
 if [ -n "$RPC_URL" ]; then
   rpc_args="--rpc-url $RPC_URL"
@@ -45,10 +49,15 @@ if [ -z "$TOKEN_SYMBOL" ]; then
   exit 1
 fi
 
+if [ -z "$WITH_MULTIPLIER" ]; then
+  echo "WITH_MULTIPLIER is not set"
+  exit 1
+fi
+
 forge script \
     $rpc_args \
     $wallet_args \
     $etherscan_args \
     --broadcast \
     $@ \
-    script/DeployCometWrapper.s.sol:DeployCometWrapper
+    script/DeploySingleCometWrapper.s.sol:DeploySingleCometWrapper
