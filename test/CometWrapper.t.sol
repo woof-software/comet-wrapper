@@ -11,7 +11,7 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     function setUpAliceAndBobCometBalances() public {
-        deal(address(underlyingToken), address(cometHolder), 20_000 * decimalScale);
+        deal(address(underlyingToken), address(cometHolder), 50_000 * decimalScale);
         vm.startPrank(cometHolder);
         underlyingToken.approve(address(comet), 20_000 * decimalScale);
         comet.supply(address(underlyingToken), 20_000 * decimalScale);
@@ -21,6 +21,12 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
 
         comet.transfer(bob, 10_000 * decimalScale);
         assertGt(comet.balanceOf(bob), 9999 * decimalScale);
+
+        underlyingToken.transfer(alice, 10_000 * decimalScale);
+        assertGt(underlyingToken.balanceOf(alice), 9999 * decimalScale);
+
+        underlyingToken.transfer(bob, 10_000 * decimalScale);
+        assertGt(underlyingToken.balanceOf(bob), 9999 * decimalScale);
         vm.stopPrank();
     }
 
@@ -391,6 +397,36 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         assertLe(totalAssets, cometWrapper.totalAssets());
     }
 
+    function test_depositUnderlying(uint256 amount1, uint256 amount2) public {
+        setUpAliceAndBobCometBalances();
+
+        (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+
+        deal(address(underlyingToken), alice, amount1);
+
+        deal(address(underlyingToken), bob, amount2);
+
+        vm.startPrank(alice);
+        underlyingToken.approve(address(cometWrapper), amount1);
+
+        cometWrapper.depositUnderlying(amount1, alice);
+        vm.stopPrank();
+
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        skip(14 days);
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+
+        vm.startPrank(bob);
+        underlyingToken.approve(address(cometWrapper), amount2);
+        cometWrapper.depositUnderlying(amount2, bob);
+        vm.stopPrank();
+
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        uint256 totalAssets = cometWrapper.maxWithdraw(alice) + cometWrapper.maxWithdraw(bob);
+        // Alice and Bob should be able to withdraw all their assets without issue
+        assertLe(totalAssets, cometWrapper.totalAssets());
+    }
+
     function test_depositTo() public {
         setUpAliceAndBobCometBalances();
 
@@ -476,6 +512,68 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         assertEq(cometWrapper.underlyingBalance(bob), 0);
         assertApproxEqAbs(comet.balanceOf(bob), bobCometBalance + bobAssets, 2);
         assertLe(comet.balanceOf(bob), bobCometBalance + bobAssets);
+    }
+
+    function test_withdrawInUnderlying(uint256 amount1, uint256 amount2, uint256 aliceWithdrawAmount) public {
+        setUpAliceAndBobCometBalances();
+
+        (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+        aliceWithdrawAmount = bound(aliceWithdrawAmount, 0, amount1);
+
+        vm.startPrank(cometHolder);
+        comet.allow(wrapperAddress, true);
+        cometWrapper.deposit(amount1, alice);
+        cometWrapper.deposit(amount2, bob);
+        vm.stopPrank();
+
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+
+        skip(14 days);
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+
+        uint256 balanceBefore = underlyingToken.balanceOf(alice);
+        vm.prank(alice);
+        cometWrapper.withdrawInUnderlying(aliceWithdrawAmount, alice, alice);
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        assertEq(underlyingToken.balanceOf(alice) - balanceBefore, aliceWithdrawAmount);
+
+        skip(500 days);
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+
+        uint256 aliceAssets = cometWrapper.maxWithdraw(alice);
+        uint256 bobAssets = cometWrapper.maxWithdraw(bob);
+        uint256 totalAssets = aliceAssets + bobAssets;
+        assertLe(totalAssets, cometWrapper.totalAssets());
+
+        uint256 aliceUnderlyingBalance = underlyingToken.balanceOf(alice);
+        uint256 bobUnderlyingBalance = underlyingToken.balanceOf(bob);
+
+        vm.startPrank(alice);
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(alice, alice, alice, aliceAssets, cometWrapper.previewWithdraw(aliceAssets));
+        cometWrapper.withdrawInUnderlying(aliceAssets, alice, alice);
+        vm.stopPrank();
+
+
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        assertEq(cometWrapper.underlyingBalance(alice), 0);
+        assertApproxEqAbs(underlyingToken.balanceOf(alice), aliceUnderlyingBalance + aliceAssets, 2);
+        assertLe(underlyingToken.balanceOf(alice), aliceUnderlyingBalance + aliceAssets);
+
+        vm.startPrank(bob);
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(bob, bob, bob, bobAssets, cometWrapper.previewWithdraw(bobAssets));
+        cometWrapper.withdrawInUnderlying(bobAssets, bob, bob);
+        vm.stopPrank();
+
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        assertEq(cometWrapper.underlyingBalance(bob), 0);
+        assertApproxEqAbs(underlyingToken.balanceOf(bob), bobUnderlyingBalance + bobAssets, 2);
+        assertLe(underlyingToken.balanceOf(bob), bobUnderlyingBalance + bobAssets);
     }
 
     function test_withdrawTo() public {
@@ -654,6 +752,42 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
     }
 
+    function test_mintWithUnderlying(uint256 amount1, uint256 amount2) public {
+        setUpAliceAndBobCometBalances();
+
+        (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+
+        deal(address(underlyingToken), alice, amount1);
+        deal(address(underlyingToken), bob, amount2);
+
+        uint256 aliceMintAmount = amount1 / 2;
+        uint256 bobMintAmount = amount2 / 2;
+
+        vm.startPrank(alice);
+        underlyingToken.approve(address(cometWrapper), cometWrapper.previewMint(aliceMintAmount));
+        cometWrapper.mintWithUnderlying(aliceMintAmount, alice);
+        vm.stopPrank();
+
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        assertEq(cometWrapper.balanceOf(alice), aliceMintAmount);
+        assertEq(cometWrapper.maxRedeem(alice), cometWrapper.balanceOf(alice));
+
+        vm.startPrank(bob);
+        underlyingToken.approve(address(cometWrapper), cometWrapper.previewMint(bobMintAmount));
+        cometWrapper.mintWithUnderlying(bobMintAmount, bob);
+        vm.stopPrank();
+
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+        assertEq(cometWrapper.balanceOf(bob), bobMintAmount);
+        assertEq(cometWrapper.maxRedeem(bob), cometWrapper.balanceOf(bob));
+
+        uint256 totalAssets = cometWrapper.maxWithdraw(bob) + cometWrapper.maxWithdraw(alice);
+        // Total asset owed to Alice and Bob is less than the total assets stored in the wrapper
+        // due to rounding down in favor of the wrapper.
+        assertLe(totalAssets, cometWrapper.totalAssets());
+        assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
+    }
+
     function test_mintTo() public {
         setUpAliceAndBobCometBalances();
 
@@ -703,6 +837,51 @@ abstract contract CometWrapperTest is CoreTest, CometMath {
         emit Withdraw(bob, bob, bob, bobAssetsWithdrawn, bobShares);
         vm.prank(bob);
         cometWrapper.redeem(bobShares, bob, bob);
+
+        // Ensure that actual assets withdrawn is <= the asset value of the shares burnt
+        assertLe(aliceAssetsWithdrawn, aliceSharesToAssets);
+        assertLe(bobAssetsWithdrawn, bobSharesToAssets);
+
+        // Ensure that the wrapper is fully backed by the underlying Comet asset
+        (principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+    }
+
+    function test_redeemInUnderlying(uint256 amount1, uint256 amount2) public {
+        setUpAliceAndBobCometBalances();
+
+        (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+
+        vm.startPrank(cometHolder);
+        comet.allow(wrapperAddress, true);
+        cometWrapper.deposit(amount1, alice);
+        cometWrapper.deposit(amount2, bob);
+        vm.stopPrank();
+
+        (int104 principal,,,,) = comet.userBasic(wrapperAddress);
+        assertEq(cometWrapper.totalSupply(), unsigned104(principal));
+        assertEq(cometWrapper.totalAssets(), comet.balanceOf(wrapperAddress));
+
+        skip(500 days);
+
+        uint256 aliceShares = cometWrapper.maxRedeem(alice);
+        uint256 bobShares = cometWrapper.maxRedeem(bob);
+
+        // All users can fully redeem shares
+        uint256 aliceSharesToAssets = cometWrapper.convertToAssets(aliceShares);
+        uint256 aliceAssetsWithdrawn = cometWrapper.previewRedeem(aliceShares);
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(alice, alice, alice, aliceAssetsWithdrawn, aliceShares);
+        vm.prank(alice);
+        cometWrapper.redeemInUnderlying(aliceShares, alice, alice);
+
+        uint256 bobSharesToAssets = cometWrapper.convertToAssets(bobShares);
+        uint256 bobAssetsWithdrawn = cometWrapper.previewRedeem(bobShares);
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(bob, bob, bob, bobAssetsWithdrawn, bobShares);
+        vm.prank(bob);
+        cometWrapper.redeemInUnderlying(bobShares, bob, bob);
 
         // Ensure that actual assets withdrawn is <= the asset value of the shares burnt
         assertLe(aliceAssetsWithdrawn, aliceSharesToAssets);

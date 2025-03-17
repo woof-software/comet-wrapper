@@ -141,6 +141,36 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     }
 
     /**
+     * @notice Deposits underlying assets of comet into the vault and gets shares (Wrapped Comet token) in return
+     * @param amountBase The amount of underlying assets to be deposited by the caller
+     * @param receiver The recipient address of the minted shares
+     * @return The amount of shares that are minted to the receiver
+     */
+    function depositUnderlying(uint256 amountBase, address receiver) public returns (uint256) {
+        address baseToken = comet.baseToken();
+        if (amountBase == type(uint256).max) amountBase = IERC20(baseToken).balanceOf(msg.sender);
+        if(amountBase == 0) revert InsufficientAvailableBalance();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        IERC20(baseToken).safeTransferFrom(msg.sender, address(this), amountBase);
+        uint256 toSupply = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+
+        accrueInternal(receiver);
+        IERC20(baseToken).safeApprove(address(comet), toSupply);
+        uint256 cometBefore = IERC20(asset()).balanceOf(address(this));
+        comet.supply(baseToken, toSupply);
+        uint256 receivedComet = IERC20(asset()).balanceOf(address(this)) - cometBefore;
+
+        uint256 sharesMinted = previewDeposit(receivedComet);
+        if (sharesMinted == 0) revert ZeroShares();
+
+        _mint(receiver, sharesMinted);
+
+        emit Deposit(msg.sender, receiver, receivedComet, sharesMinted);
+
+        return sharesMinted;
+    }
+
+    /**
      * @notice Mints shares (Wrapped Comet) in exchange for Comet tokens
      * @param shares The amount of shares to be minted for the receive
      * @param receiver The recipient address of the minted shares
@@ -158,6 +188,40 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
         emit Deposit(msg.sender, receiver, assets, shares);
 
         return assets;
+    }
+
+    /**
+     * @notice Mints shares (Wrapped Comet) in exchange for underlying assets of comet
+     * @param shares The amount of shares to be minted for the receive
+     * @param receiver The recipient address of the minted shares
+     * @return The amount of assets that are deposited by the caller
+     */
+    function mintWithUnderlying(uint256 shares, address receiver) public returns (uint256) {
+        if (shares == 0) revert ZeroShares();
+
+        accrueInternal(receiver);
+        uint256 assets = previewMint(shares);
+
+        address baseToken = comet.baseToken();
+        if(assets == 0) revert InsufficientAvailableBalance();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        IERC20(baseToken).safeTransferFrom(msg.sender, address(this), assets);
+        uint256 toSupply = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+
+        accrueInternal(receiver);
+        IERC20(baseToken).safeApprove(address(comet), toSupply);
+        uint256 cometBefore = IERC20(asset()).balanceOf(address(this));
+        comet.supply(baseToken, toSupply);
+        uint256 receivedComet = IERC20(asset()).balanceOf(address(this)) - cometBefore;
+
+        uint256 sharesMinted = previewDeposit(receivedComet);
+        if (sharesMinted == 0) revert ZeroShares();
+
+        _mint(receiver, sharesMinted);
+
+        emit Deposit(msg.sender, receiver, receivedComet, sharesMinted);
+
+        return sharesMinted;
     }
 
     /**
@@ -184,6 +248,32 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
     }
 
     /**
+     * @notice Withdraws assets (Comet) from the vault in exchange for underlying assets of comet and burns corresponding shares (Wrapped Comet).
+     * @param assets The amount of assets to be withdrawn by the caller
+     * @param receiver The recipient address of the withdrawn assets
+     * @param owner The owner of the assets to be withdrawn
+     * @return The amount of shares of the owner
+     */
+    function withdrawInUnderlying(uint256 assets, address receiver, address owner) public returns (uint256) {
+        accrueInternal(owner);
+        uint256 shares = previewWithdraw(assets);
+        if (shares == 0) revert ZeroShares();
+
+        if(owner != msg.sender) _spendAllowance(owner, msg.sender, shares);
+
+        _burn(owner, shares);
+        address baseToken = comet.baseToken();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        comet.withdraw(baseToken, assets);
+        uint256 toTransfer = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+        IERC20(baseToken).safeTransfer(receiver, toTransfer);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        return shares;
+    }
+
+    /**
      * @notice Redeems shares (Wrapped Comet) in exchange for assets (cTokens).
      * Caller can only redeem shares from owner if they have been given allowance to.
      * @param shares The amount of shares to be redeemed
@@ -201,6 +291,33 @@ contract CometWrapper is ERC4626Upgradeable, CometHelpers {
 
         _burn(owner, shares);
         IERC20(asset()).safeTransfer(receiver, assets);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        return assets;
+    }
+
+    /**
+     * @notice Redeems shares (Wrapped Comet) in exchange for underlying assets.
+     * @param shares The amount of shares to be redeemed
+     * @param receiver The recipient address of the withdrawn assets
+     * @param owner The owner of the shares to be redeemed
+     * @return The amount of assets (Comet) that is withdrawn and sent to the receiver
+     */
+    function redeemInUnderlying(uint256 shares, address receiver, address owner) public returns (uint256) {
+        if (shares == 0) revert ZeroShares();
+
+        accrueInternal(owner);
+        uint256 assets = previewRedeem(shares);
+
+        if(owner != msg.sender) _spendAllowance(owner, msg.sender, shares);
+
+        _burn(owner, shares);
+        address baseToken = comet.baseToken();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        comet.withdraw(baseToken, assets);
+        uint256 toTransfer = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+        IERC20(baseToken).safeTransfer(receiver, toTransfer);
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
