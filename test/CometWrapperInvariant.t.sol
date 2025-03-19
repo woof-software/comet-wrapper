@@ -12,21 +12,24 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     function test_contractBalanceInvariants(uint256 amount1, uint256 amount2) public {
         (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
 
-        vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
-        vm.prank(cometHolder);
-        comet.transfer(bob, amount2);
+        vm.stopPrank();
+        deal(address(underlyingToken), cometHolder, (amount1 + amount2) * 2);
 
-        uint256 aliceBalance = comet.balanceOf(alice);
+        vm.prank(cometHolder);
+        underlyingToken.transfer(alice, amount1);
+        vm.prank(cometHolder);
+        underlyingToken.transfer(bob, amount2);
+
+        uint256 aliceBalance = underlyingToken.balanceOf(alice);
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), aliceBalance);
         cometWrapper.deposit(aliceBalance/5, alice);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
 
-        uint256 bobBalance = comet.balanceOf(bob);
+        uint256 bobBalance = underlyingToken.balanceOf(bob);
         vm.startPrank(bob);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), bobBalance);
         cometWrapper.deposit(bobBalance/5, bob);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
@@ -85,14 +88,18 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     function test_redeemInvariants(uint256 amount1) public {
         amount1 = setUpFuzzTestAssumptions(amount1);
 
-        vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
+        vm.stopPrank();
+        deal(address(underlyingToken), cometHolder, cometWrapper.previewMint(amount1) * 2);
+        vm.startPrank(cometHolder);
+        underlyingToken.balanceOf(cometHolder);
+        underlyingToken.transfer(alice, cometWrapper.previewMint(amount1));
+        vm.stopPrank();
 
         skip(30000 days);
 
-        uint256 aliceBalance = comet.balanceOf(alice);
+        uint256 aliceBalance = underlyingToken.balanceOf(alice);
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), aliceBalance);
         cometWrapper.mint(aliceBalance/3, alice);
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
         vm.stopPrank();
@@ -138,20 +145,21 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     // - transfers must not change totalAssets
     function test_transferInvariants(uint256 amount1, uint256 amount2) public {
         (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+        deal(address(underlyingToken), cometHolder, (amount1 + amount2) * 2);
 
         vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
+        underlyingToken.transfer(alice, amount1);
         vm.prank(cometHolder);
-        comet.transfer(bob, amount2);
+        underlyingToken.transfer(bob, amount2);
 
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
-        cometWrapper.deposit(comet.balanceOf(alice), alice);
+        underlyingToken.approve(address(cometWrapper), amount1);
+        cometWrapper.deposit(underlyingToken.balanceOf(alice), alice);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        comet.allow(wrapperAddress, true);
-        cometWrapper.deposit(comet.balanceOf(bob), bob);
+        underlyingToken.approve(address(cometWrapper), amount2);
+        cometWrapper.deposit(underlyingToken.balanceOf(bob), bob);
         vm.stopPrank();
 
         uint256 totalAssets = cometWrapper.totalAssets();
