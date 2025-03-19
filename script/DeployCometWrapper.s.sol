@@ -19,9 +19,10 @@ import { CometWrapperWithoutMultiplier, ICometRewardsWithoutMultiplier } from ".
 // ETHERSCAN_KEY
 
 contract DeployCometWrapper is Script {
-    address[] COMET_ADDRESS_MAINNET=[0x3Afdc9BCA9213A35503b077a6072F3D0d5AB0840, 0x3D0bb1ccaB520A66e607822fC55BC921738fAFE3, 0xA17581A9E3356d9A858b789D68B4d866e593aE94, 0xc3d688B66703497DAA19211EEdff47f25384cdc3, 0x5D409e56D886231aDAf00c8775665AD0f9897b56];
-    string[] TOKEN_NAME_MAINNET=["Wrapped Comet USDT", "Wrapped Comet wstETH", "Wrapped Comet WETH", "Wrapped Comet USDC", "Wrapped Comet USDS"];
-    string[] TOKEN_SYMBOL_MAINNET=["wcUSDTv3", "wcWstETHv3", "wcWETHv3", "wcUSDCv3", "wcUSDSv3"];
+    address[] COMET_ADDRESS_MAINNET=[0x3Afdc9BCA9213A35503b077a6072F3D0d5AB0840, 0x3D0bb1ccaB520A66e607822fC55BC921738fAFE3, 0xA17581A9E3356d9A858b789D68B4d866e593aE94, 0xc3d688B66703497DAA19211EEdff47f25384cdc3, 0x5D409e56D886231aDAf00c8775665AD0f9897b56, 0xe85Dc543813B8c2CFEaAc371517b925a166a9293];
+    string[] TOKEN_NAME_MAINNET=["Wrapped Comet USDT", "Wrapped Comet wstETH", "Wrapped Comet WETH", "Wrapped Comet USDC", "Wrapped Comet USDS", "Wrapped Comet WBTC"];
+    string[] TOKEN_SYMBOL_MAINNET=["wcUSDTv3", "wcWstETHv3", "wcWETHv3", "wcUSDCv3", "wcUSDSv3", "wcWBTCv3"];
+
     address REWARDS_ADDRESS_MAINNET=0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
     address PROXY_ADMIN_ADDRESS_MAINNET=0x1EC63B5883C3481134FD50D5DAebc83Ecd2E8779;
 
@@ -37,9 +38,9 @@ contract DeployCometWrapper is Script {
     address REWARDS_ADDRESS_POLYGON=0x45939657d1CA34A8FA39A924B71D28Fe8431e581;
     address PROXY_ADMIN_ADDRESS_POLYGON=0xd712ACe4ca490D4F3E92992Ecf3DE12251b975F9;
 
-    address[] COMET_ADDRESS_BASE=[0xb125E6687d4313864e53df431d5425969c15Eb2F, 0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf, 0x46e6b214b524310239732D51387075E0e70970bf, 0x784efeB622244d2348d4F2522f8860B96fbEcE89];
-    string[] TOKEN_NAME_BASE=["Wrapped Comet USDC", "Wrapped Comet USDbC", "Wrapped Comet WETH", "Wrapped Comet AERO"];
-    string[] TOKEN_SYMBOL_BASE=["wcUSDCv3", "wcUSDbCv3", "wcWETHv3", "wcAEROv3"];
+    address[] COMET_ADDRESS_BASE=[0xb125E6687d4313864e53df431d5425969c15Eb2F, 0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf, 0x46e6b214b524310239732D51387075E0e70970bf, 0x784efeB622244d2348d4F2522f8860B96fbEcE89, 0x2c776041CCFe903071AF44aa147368a9c8EEA518];
+    string[] TOKEN_NAME_BASE=["Wrapped Comet USDC", "Wrapped Comet USDbC", "Wrapped Comet WETH", "Wrapped Comet AERO", "Wrapped Comet USDS"];
+    string[] TOKEN_SYMBOL_BASE=["wcUSDCv3", "wcUSDbCv3", "wcWETHv3", "wcAEROv3", "wcUSDSv3"];
     address REWARDS_ADDRESS_BASE=0x123964802e6ABabBE1Bc9547D72Ef1B69B00A6b1;
     address PROXY_ADMIN_ADDRESS_BASE=0xbdE8F31D2DdDA895264e27DD990faB3DC87b372d;
 
@@ -54,6 +55,24 @@ contract DeployCometWrapper is Script {
     string[] TOKEN_SYMBOL_SCROLL=["wcUSDCv3"];
     address REWARDS_ADDRESS_SCROLL=0x70167D30964cbFDc315ECAe02441Af747bE0c5Ee;
     address PROXY_ADMIN_ADDRESS_SCROLL=0x87A27b91f4130a25E9634d23A5B8E05e342bac50;
+
+    address[] COMET_ADDRESS_UNICHAIN=[0x2c7118c4C88B9841FCF839074c26Ae8f035f2921];
+    string[] TOKEN_NAME_UNICHAIN=["Wrapped Comet USDC"];
+    string[] TOKEN_SYMBOL_UNICHAIN=["wcUSDCv3"];
+    address REWARDS_ADDRESS_UNICHAIN=0x6f7D514bbD4aFf3BcD1140B7344b32f063dEe486 ;
+    address PROXY_ADMIN_ADDRESS_UNICHAIN=0xaeB318360f27748Acb200CE616E389A6C9409a07;
+
+    address[] COMET_ADDRESS_MANTLE=[0x606174f62cd968d8e684c645080fa694c1D7786E];
+    string[] TOKEN_NAME_MANTLE=["Wrapped Comet USDe"];
+    string[] TOKEN_SYMBOL_MANTLE=["wcUSDev3"];
+    address REWARDS_ADDRESS_MANTLE=0xCd83CbBFCE149d141A5171C3D6a0F0fCCeE225Ab;
+    address PROXY_ADMIN_ADDRESS_MANTLE=0xe268B436E75648aa0639e2088fa803feA517a0c7;
+
+    address[] COMET_ADDRESS_LINEA=[0x8D38A3d6B3c3B7d96D6536DA7Eef94A9d7dbC991];
+    string[] TOKEN_NAME_LINEA=["Wrapped Comet USDC"];
+    string[] TOKEN_SYMBOL_LINEA=["wcUSDCv3"];
+    address REWARDS_ADDRESS_LINEA=0x2c7118c4C88B9841FCF839074c26Ae8f035f2921;
+    address PROXY_ADMIN_ADDRESS_LINEA=0x4b5DeE60531a72C1264319Ec6A22678a4D0C8118;
 
     TransparentUpgradeableProxy cometWrapperProxy;
     address[] internal cometAddresses;
@@ -86,6 +105,16 @@ contract DeployCometWrapper is Script {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
+        } else if(chainId == 130) {
+            cometAddresses = COMET_ADDRESS_UNICHAIN;
+            tokenNames = TOKEN_NAME_UNICHAIN;
+            tokenSymbols = TOKEN_SYMBOL_UNICHAIN;
+            rewardsAddr = REWARDS_ADDRESS_UNICHAIN;
+            proxyAdminAddr = PROXY_ADMIN_ADDRESS_UNICHAIN;
+            for(uint i = 0; i < cometAddresses.length; i++) {
+                printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
+                deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
+            }
         } else if(chainId == 137) {
             cometAddresses = COMET_ADDRESS_POLYGON;
             tokenNames = TOKEN_NAME_POLYGON;
@@ -95,6 +124,16 @@ contract DeployCometWrapper is Script {
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
                 deployCometWrapperWithoutMultiplier(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
+            }
+        } else if(chainId == 5000) {
+            cometAddresses = COMET_ADDRESS_MANTLE;
+            tokenNames = TOKEN_NAME_MANTLE;
+            tokenSymbols = TOKEN_SYMBOL_MANTLE;
+            rewardsAddr = REWARDS_ADDRESS_MANTLE;
+            proxyAdminAddr = PROXY_ADMIN_ADDRESS_MANTLE;
+            for(uint i = 0; i < cometAddresses.length; i++) {
+                printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
+                deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
             }
         } else if(chainId == 8453) {
             cometAddresses = COMET_ADDRESS_BASE;
@@ -112,6 +151,16 @@ contract DeployCometWrapper is Script {
             tokenSymbols = TOKEN_SYMBOL_ARBITRUM;
             rewardsAddr = REWARDS_ADDRESS_ARBITRUM;
             proxyAdminAddr = PROXY_ADMIN_ADDRESS_ARBITRUM;
+            for(uint i = 0; i < cometAddresses.length; i++) {
+                printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
+                deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);
+            }
+        } else if(chainId == 59144){
+            cometAddresses = COMET_ADDRESS_LINEA;
+            tokenNames = TOKEN_NAME_LINEA;
+            tokenSymbols = TOKEN_SYMBOL_LINEA;
+            rewardsAddr = REWARDS_ADDRESS_LINEA;
+            proxyAdminAddr = PROXY_ADMIN_ADDRESS_LINEA;
             for(uint i = 0; i < cometAddresses.length; i++) {
                 printDeployInfo(tokenNames[i], tokenSymbols[i], cometAddresses[i]);
                 deployCometWrapper(cometAddresses[i], tokenNames[i], tokenSymbols[i]);

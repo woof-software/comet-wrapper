@@ -120,28 +120,38 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
     }
 
     /**
-     * @notice Deposits assets into the vault and gets shares (Wrapped Comet token) in return
-     * @param assets The amount of assets to be deposited by the caller
+     * @notice Deposits underlying assets into the vault and gets shares (Wrapped Comet token) in return
+     * @param amountBase The amount of underlying assets to be deposited by the caller
      * @param receiver The recipient address of the minted shares
      * @return The amount of shares that are minted to the receiver
      */
-    function deposit(uint256 assets, address receiver) public override returns (uint256) {
-        if (assets == type(uint256).max) assets = IERC20(asset()).balanceOf(msg.sender);
-        IERC20(asset()).safeTransferFrom(msg.sender, address(this), assets);
+    function deposit(uint256 amountBase, address receiver) public override returns (uint256) {
+        address baseToken = comet.baseToken();
+        if (amountBase == type(uint256).max) amountBase = IERC20(baseToken).balanceOf(msg.sender);
+        if(amountBase == 0) revert InsufficientAvailableBalance();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        IERC20(baseToken).safeTransferFrom(msg.sender, address(this), amountBase);
+        uint256 toSupply = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+
+        IERC20(baseToken).safeApprove(address(comet), 0);
+        IERC20(baseToken).safeApprove(address(comet), toSupply);
+        uint256 cometBefore = IERC20(asset()).balanceOf(address(this));
+        comet.supply(baseToken, toSupply);
+        uint256 receivedComet = IERC20(asset()).balanceOf(address(this)) - cometBefore;
 
         accrueInternal(receiver);
-        uint256 shares = previewDeposit(assets);
-        if (shares == 0) revert ZeroShares();
+        uint256 sharesMinted = previewDepositInternal(receivedComet, Rounding.UP);
+        if (sharesMinted == 0) revert ZeroShares();
 
-        _mint(receiver, shares);
+        _mint(receiver, sharesMinted);
 
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, receiver, receivedComet, sharesMinted);
 
-        return shares;
+        return sharesMinted;
     }
 
     /**
-     * @notice Mints shares (Wrapped Comet) in exchange for Comet tokens
+     * @notice Mints shares (Wrapped Comet) in exchange for underlying assets
      * @param shares The amount of shares to be minted for the receive
      * @param receiver The recipient address of the minted shares
      * @return The amount of assets that are deposited by the caller
@@ -152,21 +162,35 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
         accrueInternal(receiver);
         uint256 assets = previewMint(shares);
 
-        IERC20(asset()).safeTransferFrom(msg.sender, address(this), assets);
-        _mint(receiver, shares);
+        address baseToken = comet.baseToken();
+        if(assets == 0) revert InsufficientAvailableBalance();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        IERC20(baseToken).safeTransferFrom(msg.sender, address(this), assets);
+        uint256 toSupply = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
 
-        emit Deposit(msg.sender, receiver, assets, shares);
+        IERC20(baseToken).safeApprove(address(comet), 0);
+        IERC20(baseToken).safeApprove(address(comet), toSupply);
+        uint256 cometBefore = IERC20(asset()).balanceOf(address(this));
+        comet.supply(baseToken, toSupply);
+        uint256 receivedComet = IERC20(asset()).balanceOf(address(this)) - cometBefore;
 
-        return assets;
+        accrueInternal(receiver);
+        uint256 sharesMinted = previewDepositInternal(receivedComet, Rounding.UP);
+        if (sharesMinted == 0) revert ZeroShares();
+
+        _mint(receiver, sharesMinted);
+
+        emit Deposit(msg.sender, receiver, receivedComet, sharesMinted);
+
+        return sharesMinted;
     }
 
     /**
      * @notice Withdraws assets (Comet) from the vault and burns corresponding shares (Wrapped Comet).
-     * Caller can only withdraw assets from owner if they have been given allowance to.
      * @param assets The amount of assets to be withdrawn by the caller
      * @param receiver The recipient address of the withdrawn assets
      * @param owner The owner of the assets to be withdrawn
-     * @return The amount of shares of the owner that are burned
+     * @return The amount of shares of the owner
      */
     function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256) {
         accrueInternal(owner);
@@ -176,7 +200,11 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
         if(owner != msg.sender) _spendAllowance(owner, msg.sender, shares);
 
         _burn(owner, shares);
-        IERC20(asset()).safeTransfer(receiver, assets);
+        address baseToken = comet.baseToken();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        comet.withdraw(baseToken, assets);
+        uint256 toTransfer = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+        IERC20(baseToken).safeTransfer(receiver, toTransfer);
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -184,12 +212,11 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
     }
 
     /**
-     * @notice Redeems shares (Wrapped Comet) in exchange for assets (cTokens).
-     * Caller can only redeem shares from owner if they have been given allowance to.
+     * @notice Redeems shares (Wrapped Comet) in exchange for underlying assets.
      * @param shares The amount of shares to be redeemed
      * @param receiver The recipient address of the withdrawn assets
      * @param owner The owner of the shares to be redeemed
-     * @return The amount of assets that is withdrawn and sent to the receiver
+     * @return The amount of assets (Comet) that is withdrawn and sent to the receiver
      */
     function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
         if (shares == 0) revert ZeroShares();
@@ -200,7 +227,11 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
         if(owner != msg.sender) _spendAllowance(owner, msg.sender, shares);
 
         _burn(owner, shares);
-        IERC20(asset()).safeTransfer(receiver, assets);
+        address baseToken = comet.baseToken();
+        uint256 beforeBase = IERC20(baseToken).balanceOf(address(this));
+        comet.withdraw(baseToken, assets);
+        uint256 toTransfer = IERC20(baseToken).balanceOf(address(this)) - beforeBase;
+        IERC20(baseToken).safeTransfer(receiver, toTransfer);
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -384,19 +415,19 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
 
     /** @dev See {IERC4626-maxDeposit}. */
     function maxDeposit(address) public view override returns (uint256) {
-        if(comet.isTransferPaused()) return 0;
+        if(comet.isSupplyPaused()) return 0;
         return uint256(type(uint104).max);
     }
 
     /** @dev See {IERC4626-maxMint}. */
     function maxMint(address) public view override returns (uint256) {
-        if(comet.isTransferPaused()) return 0;
+        if(comet.isSupplyPaused()) return 0;
         return uint256(type(uint104).max);
     }
 
     /** @dev See {IERC4626-maxRedeem}. */
     function maxRedeem(address owner) public view override returns (uint256) {
-        if(comet.isTransferPaused()) return 0;
+        if(comet.isSupplyPaused()) return 0;
         return balanceOf(owner);
     }
 
@@ -447,7 +478,11 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of shares that would be minted by the deposit
      */
     function previewDeposit(uint256 assets) public view override returns (uint256) {
-        if (comet.isTransferPaused()) return 0;
+        return previewDepositInternal(assets, Rounding.DOWN);
+    }
+
+    function previewDepositInternal(uint256 assets, Rounding rounding) internal view returns (uint256) {
+        if (comet.isSupplyPaused()) return 0;
         if (assets == type(uint256).max) assets = IERC20(asset()).balanceOf(msg.sender);
         // Calculate shares to mint by calculating the new principal amount
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
@@ -455,7 +490,7 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
         uint256 currentPrincipal = totalSupply();
         uint256 newBalance = totalAssets() + assets;
         // Round down so accounting is in the wrapper's favor
-        uint104 newPrincipal = principalValueSupply(baseSupplyIndex_, newBalance, Rounding.DOWN);
+        uint104 newPrincipal = principalValueSupply(baseSupplyIndex_, newBalance, rounding);
         uint256 shares = newPrincipal - currentPrincipal;
         return shares;
     }
@@ -467,7 +502,7 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of assets required to mint the given shares
      */
     function previewMint(uint256 shares) public view override returns (uint256) {
-        if (comet.isTransferPaused()) return 0;
+        if (comet.isSupplyPaused()) return 0;
         // Back out the quantity of assets to deposit in order to increment principal by `shares`
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
         if(baseSupplyIndex_ == 0) return 0;
@@ -486,7 +521,7 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of shares required to withdraw the given assets
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256) {
-        if (comet.isTransferPaused()) return 0;
+        if (comet.isSupplyPaused()) return 0;
         // Calculate the quantity of shares to burn by calculating the new principal amount
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
         if(baseSupplyIndex_ == 0) return 0;
@@ -505,7 +540,7 @@ contract CometWrapperWithoutMultiplier is ERC4626Upgradeable, CometHelpers {
      * @return The total amount of assets that would be withdrawn by the redemption
      */
     function previewRedeem(uint256 shares) public view override returns (uint256) {
-        if (comet.isTransferPaused()) return 0;
+        if (comet.isSupplyPaused()) return 0;
         // Back out the quantity of assets to withdraw in order to decrement principal by `shares`
         uint64 baseSupplyIndex_ = accruedSupplyIndex();
         if(baseSupplyIndex_ == 0) return 0;
