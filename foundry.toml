@@ -24,4 +24,9 @@ scroll = "${SCROLL_RPC_URL}"
 goerli = "${GOERLI_RPC_URL}"
 sepolia = "${SEPOLIA_RPC_URL}"
 
+[etherscan]
+mainnet = { key = "${ETHERSCAN_KEY}", url = "https://api.etherscan.io/api"}
+linea = { key = "${LINEASCAN_KEY}", url = "https://api.lineascan.build/api"}
+mantle = { key = "${MANTLESCAN_KEY}", url = "https://api.mantlescan.xyz/api"}
+
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

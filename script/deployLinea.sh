@@ -7,8 +7,8 @@ if [ -f .env ]; then
   source .env
 fi
 
-if [ -n "$MAINNET_RPC_URL" ]; then
-  rpc_args="--rpc-url $MAINNET_RPC_URL"
+if [ -n "$RPC_LINEA_URL" ]; then
+  rpc_args="--rpc-url $RPC_LINEA_URL"
 else
   rpc_args=""
 fi
@@ -19,8 +19,8 @@ else
   wallet_args="--unlocked"
 fi
 
-if [ -n "$ETHERSCAN_KEY" ]; then
-  etherscan_args="--verify --etherscan-api-key $ETHERSCAN_KEY"
+if [ -n "$LINEA_KEY" ]; then
+  etherscan_args="--verify --etherscan-api-key $LINEA_KEY"
 else
   etherscan_args=""
 fi
@@ -30,6 +30,7 @@ forge script \
     $rpc_args \
     $wallet_args \
     $etherscan_args \
+    --gas-price 20000000 \
     --legacy \
     --broadcast \
     $@ \
