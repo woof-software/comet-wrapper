@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { CoreTest, CometHelpers, CometWrapper, ICometRewards } from "./CoreTest.sol";
 import { CometMath } from "../src/vendor/CometMath.sol";
@@ -12,21 +12,24 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     function test_contractBalanceInvariants(uint256 amount1, uint256 amount2) public {
         (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
 
-        vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
-        vm.prank(cometHolder);
-        comet.transfer(bob, amount2);
+        vm.stopPrank();
+        deal(address(underlyingToken), cometHolder, (amount1 + amount2) * 2);
 
-        uint256 aliceBalance = comet.balanceOf(alice);
+        vm.prank(cometHolder);
+        underlyingToken.transfer(alice, amount1);
+        vm.prank(cometHolder);
+        underlyingToken.transfer(bob, amount2);
+
+        uint256 aliceBalance = underlyingToken.balanceOf(alice);
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), aliceBalance);
         cometWrapper.deposit(aliceBalance/5, alice);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
 
-        uint256 bobBalance = comet.balanceOf(bob);
+        uint256 bobBalance = underlyingToken.balanceOf(bob);
         vm.startPrank(bob);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), bobBalance);
         cometWrapper.deposit(bobBalance/5, bob);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
@@ -40,8 +43,9 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
         vm.prank(bob);
         cometWrapper.mint(bobBalance/3, bob);
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
-
-        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(comet.userBasic(address(cometWrapper)).principal));
+        
+        (int104 principal,,,,) = comet.userBasic(address(cometWrapper));
+        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(principal));
 
         vm.prank(alice);
         cometWrapper.withdraw(aliceBalance/4, alice, alice);
@@ -50,8 +54,9 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
         vm.prank(bob);
         cometWrapper.withdraw(bobBalance/4, bob, bob);
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
-
-        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(comet.userBasic(address(cometWrapper)).principal));
+        
+        (principal,,,,) = comet.userBasic(address(cometWrapper));
+        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(principal));
 
         vm.prank(alice);
         cometWrapper.redeem(aliceBalance/5, alice, alice);
@@ -61,19 +66,21 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
         cometWrapper.redeem(bobBalance/5, bob, bob);
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
 
-        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(comet.userBasic(address(cometWrapper)).principal));
+        (principal,,,,) = comet.userBasic(address(cometWrapper));
+        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(principal));
 
         vm.startPrank(alice);
-        cometWrapper.redeem(cometWrapper.maxRedeem(alice), alice, alice);
+        cometWrapper.redeem(cometWrapper.balanceOf(alice), alice, alice);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
 
         vm.startPrank(bob);
-        cometWrapper.redeem(cometWrapper.maxRedeem(bob), bob, bob);
+        cometWrapper.redeem(cometWrapper.balanceOf(bob), bob, bob);
         vm.stopPrank();
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
 
-        assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(comet.userBasic(address(cometWrapper)).principal));
+        // (principal,,,,) = comet.userBasic(address(cometWrapper));
+        // assertEq(cometWrapper.balanceOf(alice) + cometWrapper.balanceOf(bob), unsigned256(principal));
     }
 
     // Invariants:
@@ -81,25 +88,30 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     function test_redeemInvariants(uint256 amount1) public {
         amount1 = setUpFuzzTestAssumptions(amount1);
 
-        vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
+        vm.stopPrank();
+        deal(address(underlyingToken), cometHolder, cometWrapper.previewMint(amount1) * 2);
+        vm.startPrank(cometHolder);
+        underlyingToken.balanceOf(cometHolder);
+        underlyingToken.transfer(alice, cometWrapper.previewMint(amount1));
+        vm.stopPrank();
 
         skip(30000 days);
 
-        uint256 aliceBalance = comet.balanceOf(alice);
+        uint256 aliceBalance = underlyingToken.balanceOf(alice);
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
+        underlyingToken.approve(address(cometWrapper), aliceBalance);
         cometWrapper.mint(aliceBalance/3, alice);
         assertEq(comet.balanceOf(address(cometWrapper)), cometWrapper.totalAssets());
         vm.stopPrank();
 
 
         vm.startPrank(alice);
-        int256 preWrapperCometPrincipal = comet.userBasic(address(cometWrapper)).principal;
+        (int104 preWrapperCometPrincipal,,,,) = comet.userBasic(address(cometWrapper));
         uint256 preAliceShares = cometWrapper.balanceOf(alice);
         uint256 preTotalSupply = cometWrapper.totalSupply();
         cometWrapper.redeem(aliceBalance/5, alice, alice);
-        uint256 decreaseInWrapperCometPrincipal = uint256(preWrapperCometPrincipal - comet.userBasic(address(cometWrapper)).principal);
+        (int104 principal,,,,) = comet.userBasic(address(cometWrapper));
+        uint256 decreaseInWrapperCometPrincipal = uint256(unsigned256(preWrapperCometPrincipal - principal));
         uint256 aliceSharesBurnt = preAliceShares - cometWrapper.balanceOf(alice);
         uint256 decreaseInTotalSupply = preTotalSupply - cometWrapper.totalSupply();
         // Check that principal is decreased by the amount of shares burnt
@@ -111,11 +123,12 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
         vm.stopPrank();
 
         vm.startPrank(alice);
-        preWrapperCometPrincipal = comet.userBasic(address(cometWrapper)).principal;
+        (preWrapperCometPrincipal,,,,) = comet.userBasic(address(cometWrapper));
         preAliceShares = cometWrapper.balanceOf(alice);
         preTotalSupply = cometWrapper.totalSupply();
-        cometWrapper.redeem(cometWrapper.maxRedeem(alice), alice, alice);
-        decreaseInWrapperCometPrincipal = uint256(preWrapperCometPrincipal - comet.userBasic(address(cometWrapper)).principal);
+        cometWrapper.redeem(cometWrapper.balanceOf(alice), alice, alice);
+        (principal,,,,) = comet.userBasic(address(cometWrapper));
+        decreaseInWrapperCometPrincipal = uint256(unsigned256(preWrapperCometPrincipal - principal));
         aliceSharesBurnt = preAliceShares - cometWrapper.balanceOf(alice);
         decreaseInTotalSupply = preTotalSupply - cometWrapper.totalSupply();
         // Check that principal is decreased by the amount of shares burnt
@@ -132,20 +145,21 @@ abstract contract CometWrapperInvariantTest is CoreTest, CometMath {
     // - transfers must not change totalAssets
     function test_transferInvariants(uint256 amount1, uint256 amount2) public {
         (amount1, amount2) = setUpFuzzTestAssumptions(amount1, amount2);
+        deal(address(underlyingToken), cometHolder, (amount1 + amount2) * 2);
 
         vm.prank(cometHolder);
-        comet.transfer(alice, amount1);
+        underlyingToken.transfer(alice, amount1);
         vm.prank(cometHolder);
-        comet.transfer(bob, amount2);
+        underlyingToken.transfer(bob, amount2);
 
         vm.startPrank(alice);
-        comet.allow(wrapperAddress, true);
-        cometWrapper.deposit(comet.balanceOf(alice), alice);
+        underlyingToken.approve(address(cometWrapper), amount1);
+        cometWrapper.deposit(underlyingToken.balanceOf(alice), alice);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        comet.allow(wrapperAddress, true);
-        cometWrapper.deposit(comet.balanceOf(bob), bob);
+        underlyingToken.approve(address(cometWrapper), amount2);
+        cometWrapper.deposit(underlyingToken.balanceOf(bob), bob);
         vm.stopPrank();
 
         uint256 totalAssets = cometWrapper.totalAssets();

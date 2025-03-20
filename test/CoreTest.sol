@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { Test } from "forge-std/Test.sol";
+import "forge-std/console.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { CometWrapper, CometInterface, ICometRewards, CometHelpers, IERC20, IERC20Metadata } from "../src/CometWrapper.sol";
+import { CometWrapperWithoutMultiplier, ICometRewardsWithoutMultiplier } from "../src/CometWrapperWithoutMultiplier.sol";
 import { EIP1271Signer } from "../src/test/EIP1271Signer.sol";
+import { ERC20 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 
 abstract contract CoreTest is Test {
     function NETWORK() external virtual returns (string calldata);
@@ -31,7 +34,7 @@ abstract contract CoreTest is Test {
     CometWrapper public cometWrapper;
     CometInterface public comet;
     ICometRewards public cometRewards;
-    IERC20 public underlyingToken;
+    ERC20 public underlyingToken;
     IERC20 public comp;
     address public wrapperAddress;
     uint256 public decimalScale;
@@ -58,18 +61,25 @@ abstract contract CoreTest is Test {
         underlyingTokenHolder = this.UNDERLYING_TOKEN_HOLDER();
         cometHolder = this.COMET_HOLDER();
 
-        underlyingToken = IERC20(underlyingTokenAddress);
+        underlyingToken = ERC20(underlyingTokenAddress);
         comp = IERC20(compAddress);
         comet = CometInterface(cometAddress);
         cometRewards = ICometRewards(rewardAddress);
-        CometWrapper cometWrapperImpl =
-            new CometWrapper(comet, cometRewards);
+        CometWrapper cometWrapperImpl = CometWrapper(deployWrapperImplementationForGivenChain(cometAddress, rewardAddress));
         TransparentUpgradeableProxy cometWrapperProxy = new TransparentUpgradeableProxy(address(cometWrapperImpl), proxyAdminAddress, "");
         cometWrapper = CometWrapper(address(cometWrapperProxy));
         cometWrapper.initialize("Wrapped Comet UNDERLYING", "WcUNDERLYINGv3");
         wrapperAddress = address(cometWrapper);
         decimalScale = 10 ** IERC20Metadata(underlyingTokenAddress).decimals();
         aliceContract = address(new EIP1271Signer(alice));
+    }
+
+    function deployWrapperImplementationForGivenChain(address _comet, address _rewards) public returns (address impl) {
+        if(block.chainid == 1) { // mainnet
+            return address(new CometWrapperWithoutMultiplier(CometInterface(_comet), ICometRewardsWithoutMultiplier(_rewards)));
+        } else if(block.chainid == 8453) { // base
+            return address(new CometWrapper(CometInterface(_comet), ICometRewards(_rewards)));
+        }
     }
 
     function setUpFuzzTestAssumptions(uint256 amount) public view returns (uint256) {
